@@ -19,6 +19,7 @@ pretrain_model
 *.cu
 *.c
 *.json
+updategit.sh
 multi-task-pytorch
 seg_pred_pic
 network_structure
