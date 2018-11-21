@@ -24,7 +24,6 @@ import pynvml
 import cv2
 from tensorboardX import SummaryWriter
 logger = logging.getLogger(__name__)
-netStructure=SummaryWriter(log_dir='/home/zhanwj/Desktop/pyTorch/Detectron.pytorch/network_structure/dispSeg/')
 
 
 pynvml.nvmlInit()

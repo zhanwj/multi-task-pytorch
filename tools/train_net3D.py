@@ -152,7 +152,6 @@ def parse_args():
 
 
 def main():
-    netStructure=SummaryWriter(log_dir='/home/zhanwj/Desktop/pyTorch/Detectron.pytorch/network_structure/dispSeg/')
     saveNetStructure=False
     
     """Main function"""

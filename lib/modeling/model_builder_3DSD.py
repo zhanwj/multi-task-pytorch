@@ -30,7 +30,6 @@ from tensorboardX import SummaryWriter
 from torch.utils.checkpoint import checkpoint
 import numpy as np
 logger = logging.getLogger(__name__)
-netStructure=SummaryWriter(log_dir='/home/zhanwj/Desktop/pyTorch/Detectron.pytorch/network_structure/dispSeg/')
 
 
 pynvml.nvmlInit()
