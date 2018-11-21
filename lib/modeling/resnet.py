@@ -75,6 +75,13 @@ class Bottleneck(nn.Module):
         self.downsample = downsample
         self.stride = stride
 
+        self.avgpool=nn.Sequential(
+            nn.AvgPool2d(stride=8),
+            nn.Sigmoid(inplace=True)
+            )
+
+
+
     def forward(self, x):
         residual = x
 
@@ -91,6 +98,11 @@ class Bottleneck(nn.Module):
 
         if self.downsample is not None:
             residual = self.downsample(x)
+
+        ge_block=residual
+        ge_block=self.avgpool(ge_block)
+        ge_block=torch.nn.functional.interpolate(ge_block,residual.size()[-2:],mode='nearest')
+        residual=residual*ge_block
 
         out += residual
         out = self.relu(out)
