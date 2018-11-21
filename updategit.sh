@@ -1,3 +1,3 @@
 git add .
-git commit "origin"
+git commit -m "debug"
 git push -u origin master
