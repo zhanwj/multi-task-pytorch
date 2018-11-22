@@ -24,6 +24,7 @@ SEM:
     DEEP_SUB_SCALE: [1.0, 0.4]
     DOWNSAMPLE: [0, 3]
     OUTPUT_PREFIX: 'semseg_label'
+    USE_GE_BLOCK: True
 DISP:
     DISP_ON: True
     DIM: 256

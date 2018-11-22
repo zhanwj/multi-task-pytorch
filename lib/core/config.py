@@ -410,6 +410,8 @@ __C.SEM.PSPNET_PRETRAINED_WEIGHTS = ''
 __C.SEM.PSPNET_REQUIRES_GRAD = True
 __C.SEM.SD_DIM = 512
 __C.SEM.FPN_DIMS = [2048, 256]
+
+__C.SEM.USE_GE_BLOCK=False
 # ---------------------------------------------------------------------------- #
 # Model options
 # ---------------------------------------------------------------------------- #
