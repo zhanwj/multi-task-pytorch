@@ -412,6 +412,7 @@ __C.SEM.SD_DIM = 512
 __C.SEM.FPN_DIMS = [2048, 256]
 
 __C.SEM.USE_GE_BLOCK=False
+__C.SEM.USE_AWM_BLOCK=False
 # ---------------------------------------------------------------------------- #
 # Model options
 # ---------------------------------------------------------------------------- #
@@ -432,6 +433,7 @@ __C.DISP.DISPSEG_REQUIRES_GRAD = True
 __C.DISP.EXPECT_MAXDISP = 127
 __C.DISP.COST_VOLUME_TYPE = 'CorrelationLayer1D'
 __C.DISP.MERGE_ASPP = True
+
 # ---------------------------------------------------------------------------- #
 # Model options
 # ---------------------------------------------------------------------------- #

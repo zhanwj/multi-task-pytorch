@@ -102,6 +102,68 @@ class Bottleneck(nn.Module):
 
         return out
 
+class Bottleneck_AWM(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes, planes, stride=1, downsample=None):
+        super(Bottleneck_AWM, self).__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
+        self.bn1 = SynchronizedBatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
+                               padding=1, bias=False)
+        self.bn2 = SynchronizedBatchNorm2d(planes)
+        self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
+        self.bn3 = SynchronizedBatchNorm2d(planes * 4)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+        self.avgpool=nn.AdaptiveAvgPool2d(1)
+        self.fc1=nn.Linear(inplanes,inplanes,bias=False)
+        self.fc2=nn.Linear(planes*4,planes*4,bias=False)
+
+
+        self.combine_Linear=nn.Sequential(
+            nn.ReLU(inplace=True),
+            nn.Linear(inplanes+planes*4,(inplanes+planes*4)//2),
+            nn.Linear((inplanes+planes*4)//2,2),
+            nn.Sigmoid()
+            )
+ 
+    def forward(self, x):
+        residual = x
+        wc1=self.avgpool(residual)
+        wc1=wc1.view(wc1.size(0),-1)
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
+        wc2=self.avgpool(out)
+        wc2=wc2.view(wc2.size(0),-1)
+        if self.downsample is not None:
+            residual = self.downsample(x)
+        w=self.combine_Linear(torch.cat((wc1,wc2),dim=1))
+
+        w1,w2=torch.split(w,split_size_or_sections=1,dim=1)
+        for i in range(2):
+            w1=w1.unsqueeze(dim=1)
+            w2=w2.unsqueeze(dim=2)
+        
+        out=out*w2
+        residual=residual*w1
+        out += residual
+        out = self.relu(out)
+
+        return out
+
+
+
 class Bottleneck_GE(nn.Module):
     expansion = 4
 
@@ -118,12 +180,19 @@ class Bottleneck_GE(nn.Module):
         self.downsample = downsample
         self.stride = stride
         self.Sigmoid=nn.Sigmoid()
+        if cfg.SEM.USE_GE_BLOCK:
+            self.AvgPool2d=nn.Sequential(
+                nn.AdaptiveAvgPool2d(1)
+                )
+        
+        """
         ge_list=[]
+
         if cfg.SEM.USE_GE_BLOCK:
             for i in range(3):
                 ge_list.append(self._conv(inplanes,inplanes,groups=1))
         self.ge_model_list=nn.ModuleList(ge_list)
-
+        """
     def _conv(self,inplanes,planes,kernel_size=1,stride=4,groups=1,bias=False):
         return nn.Sequential(
             nn.Conv2d(inplanes,planes,kernel_size,stride,bias),
@@ -138,8 +207,9 @@ class Bottleneck_GE(nn.Module):
 
         if cfg.SEM.USE_GE_BLOCK:
             ge_block=residual
-            for ge_model in self.ge_model_list:
-                ge_block=ge_model(ge_block)
+            ge_block=self.AvgPool2d(ge_block)
+            #for ge_model in self.ge_model_list:
+            #    ge_block=ge_model(ge_block)
             ge_block=torch.nn.functional.interpolate(ge_block,residual.size()[-2:],mode='nearest')
             ge_block=self.Sigmoid(ge_block)
             residual=residual*ge_block
@@ -332,8 +402,13 @@ def resnet50(pretrained=False, **kwargs):
     """
     if cfg.SEM.USE_GE_BLOCK:
         model = ResNet_GE(Bottleneck_GE,[3, 4, 6, 3],**kwargs)
+        print("Using ResNet with GE block")
+    elif cfg.SEM.USE_AWM_BLOCK:
+        model = ResNet(Bottleneck_AWM, [3, 4, 6, 3], **kwargs)
+        print("Using ResNet with AWM block")
     else:
         model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
+        print("Using original resnet")
     if pretrained and len(cfg.SEM.PSPNET_PRETRAINED_WEIGHTS) == 0:
         model.load_state_dict(load_url(model_urls['resnet50']), strict=False)
     return model

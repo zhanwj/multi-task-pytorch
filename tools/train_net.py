@@ -27,6 +27,7 @@ from datasets.roidb import combined_roidb_for_training, combined_roidb_for_train
 from modeling.model_builder import Generalized_RCNN
 from modeling.model_builder_3DSD import Generalized_3DSD
 from modeling.model_builder_segdisp import Generalized_SEGDISP
+from modeling.model_builder_semseg_bat import Generalized_SEMSEG
 from roi_data.loader import RoiDataLoader, MinibatchSampler, collate_minibatch, collate_minibatch_semseg
 from utils.detectron_weight_helper import load_detectron_weight
 from utils.logging import log_stats
@@ -393,8 +394,8 @@ def main():
                 training_stats.IterToc()
 
                 if args.step % args.disp_interval == 0:
-                    disp_image=net_outputs['disp_image']
-                    semseg_image=net_outputs['semseg_image']
+                    disp_image=''
+                    semseg_image=''
                     #tblogger.add_image('disp_image',disp_image,global_step)
                     #tblogger.add_image('semseg_image',semseg_image,global_step)
                     log_training_stats(training_stats, global_step, lr)

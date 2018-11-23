@@ -91,12 +91,10 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         self.orphans_in_detectron = None
 
         #define encoder 
-        #self.encoder = get_func(cfg.MODEL.CONV_BODY)()
         builder = semseg_heads.ModelBuilder()
         self.encoder = builder.build_encoder(
             arch=cfg.SEM.ARCH_ENCODER,
             fc_dim=cfg.SEM.FC_DIM)
-        #weights=cfg.RESNETS.IMAGENET_PRETRAINED_WEIGHTS)
 
         #define semseg heads
         self.decoder = builder.build_decoder(
@@ -105,7 +103,7 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 num_class=cfg.MODEL.NUM_CLASSES,
                 use_softmax=not self.training,
                 weights='')
-        self.crit = nn.NLLLoss(ignore_index=-1)
+        self.crit = nn.NLLLoss(ignore_index=255)
         self.deep_sup_scale = cfg.SEM.DEEP_SUB_SCALE
 
     def _init_modules(self):
@@ -118,33 +116,35 @@ class Generalized_SEMSEG(SegmentationModuleBase):
 
     def forward(self, data, **feed_dict):
         return_dict = {}
-        #print (feed_dict['semseg_label_1'][0,0,0])
         if self.training: # training
             return_dict['losses'] = {}
             return_dict['metrics'] = {}
             if cfg.SEM.DECODER_TYPE.endswith('deepsup'): # use deep supervision technique
                 (pred, pred_deepsup) = self.decoder(self.encoder(data, return_feature_maps=True))
             else:
-                pred = self.decoder(self.encoder(data, return_feature_maps=False))
+                pred = self.decoder(self.encoder(data, return_feature_maps=True))
             if cfg.SEM.DECODER_TYPE.endswith('deepsup') and not isinstance(pred_deepsup, list):
                 pred_deepsup = [pred_deepsup]
-            loss = self.crit(pred, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
+            pred_semseg=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
+            loss = self.crit(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
+            return_dict['losses']['loss_semseg'] = loss
+            acc = self.pixel_acc(pred_semseg, feed_dict[cfg.SEM.OUTPUT_PREFIX+'_0'])
+            return_dict['metrics']['accuracy_pixel'] = acc
             if cfg.SEM.DECODER_TYPE.endswith('deepsup'):
                 for i in range(1, len(cfg.SEM.DOWNSAMPLE)):
-                    print (self.deep_sup_scale[i])
-                    print (pred_deepsup[i-1].shape)
                     loss_deepsup = self.crit(pred_deepsup[i-1], 
                         feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, i)])
                     loss = loss + loss_deepsup * self.deep_sup_scale[i]
-            #unsqueeze(1)
-            #acc = self.pixel_acc(pred, feed_dict[cfg.SEM.OUTPUT_PREFIX+'_0'])
-            return_dict['losses']['loss_semseg'] = loss
-            #return_dict['metrics']['accuracy_pixel'] = torch.unsqueeze(acc, 0)
+            # pytorch0.4 bug on gathering scalar(0-dim) tensors
+            for k, v in return_dict['losses'].items():
+                return_dict['losses'][k] = v.unsqueeze(0)
+            for k, v in return_dict['metrics'].items():
+                return_dict['metrics'][k] = v.unsqueeze(0)
         else: # inference
             pred = self.decoder(self.encoder(data, return_feature_maps=True), segSize=segSize)
             return_dict['pred_semseg'] = pred
 
-        return loss
+        return return_dict
 
 
     @check_inference
