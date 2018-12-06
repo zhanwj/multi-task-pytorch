@@ -399,8 +399,7 @@ class PPMBilinear(nn.Module):
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
-        else:
-            x = nn.functional.log_softmax(x, dim=1)
+
         return x
 
 
@@ -459,7 +458,6 @@ class PPMBilinearDeepsup(nn.Module):
         _ = self.dropout_deepsup(_)
         _ = self.conv_last_deepsup(_)
 
-        #x = nn.functional.log_softmax(x, dim=1)
         _ = nn.functional.log_softmax(_, dim=1)
 
         return (x, _)
@@ -551,7 +549,6 @@ class UPerNet(nn.Module):
             x = nn.functional.softmax(x, dim=1)
             return x
 
-        x = nn.functional.log_softmax(x, dim=1)
 
         return x
 

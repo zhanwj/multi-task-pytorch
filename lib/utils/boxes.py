@@ -49,10 +49,10 @@ import warnings
 import numpy as np
 
 from core.config import cfg
-#import utils.cython_bbox as cython_bbox
-#import utils.cython_nms as cython_nms
-#
-#bbox_overlaps = cython_bbox.bbox_overlaps
+import utils.cython_bbox as cython_bbox
+import utils.cython_nms as cython_nms
+
+bbox_overlaps = cython_bbox.bbox_overlaps
 
 
 def boxes_area(boxes):
