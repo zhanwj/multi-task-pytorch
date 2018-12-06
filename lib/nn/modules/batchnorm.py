@@ -50,7 +50,7 @@ class _SynchronizedBatchNorm(_BatchNorm):
         if not (self._is_parallel and self.training):
             return F.batch_norm(
                 input, self.running_mean, self.running_var, self.weight, self.bias,
-                self.training and False, self.momentum, self.eps)
+                self.training, self.momentum, self.eps)
 
         # Resize the input to (B, C, -1).
         input_shape = input.size()
