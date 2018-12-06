@@ -9,8 +9,8 @@ from torch.autograd import Variable
 
 from core.config import cfg
 from model.roi_pooling.functions.roi_pool import RoIPoolFunction
-from model.roi_crop.functions.roi_crop import RoICropFunction
-from modeling.roi_xfrom.roi_align.functions.roi_align import RoIAlignFunction
+#from model.roi_crop.functions.roi_crop import RoICropFunction
+#from modeling.roi_xfrom.roi_align.functions.roi_align import RoIAlignFunction
 import modeling.rpn_heads as rpn_heads
 import modeling.fast_rcnn_heads as fast_rcnn_heads
 import modeling.mask_rcnn_heads as mask_rcnn_heads
@@ -103,9 +103,16 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 num_class=cfg.MODEL.NUM_CLASSES,
                 use_softmax=not self.training,
                 weights='')
-        self.crit = nn.NLLLoss(ignore_index=255)
         self.deep_sup_scale = cfg.SEM.DEEP_SUB_SCALE
         self.flag = 0
+        self.crit = nn.NLLLoss(ignore_index=255)
+
+        if not cfg.SEM.OHEM_ON:
+            self.loss_semseg = self.loss_norm
+        else:
+            self.scan = torch.arange(cfg.MODEL.NUM_CLASSSES).view(1, cfg.MODEL.NUM_CLASSSES, 1, 1).cuda()
+            self.loss_semseg = self.loss_ohem
+
     def _init_modules(self):
         if cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS:
             resnet_utils.load_pretrained_imagenet_weights(self)
@@ -114,14 +121,18 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             for p in self.Conv_Body.parameters():
                 p.requires_grad = False
 
+    def loss_norm(self, pred_semseg, semseg_label):
+        pred_semseg = F.log_softmax(pred_semseg, dim=1)
+        return self.crit(pred_semseg, semseg_label)
+
     def loss_ohem(self, pred_semseg, semseg_label):
         b, c, h, w = pred_semseg.shape
-        prob_pos = F.softmax(pred_semseg, dim=1)
-        prob_pos = prob_pos.view(b, c, -1)
-        prob_pos = prob_pos[:, :, semseg_label.flatten())
-        prob_pos = (prob_pos > cfg.SEM.OHEM_POS).long()
-        prob_pos = prob_pos.view(semseg_label.shape)
-        semseg_label[prob_pos] = 255
+        scan_pos = scan.repeat(b,1,1,1)
+        scan_pos = semseg_label == scan_pos
+        prob_pos = torch.softmax(pred_semseg, dim=1)
+        prob_pos = torch.sum(prob_pos*scan_pos, dim=1)
+        semseg_label[prob_pos>cfg.SEM.OHEM_POS] = 255
+        pred_semseg = F.log_softmax(pred_semseg, dim=1)
         loss = self.crit(pred_semseg, semseg_label)
         return loss
 
@@ -136,15 +147,14 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 pred = self.decoder(self.encoder(data, return_feature_maps=True))
             if cfg.SEM.DECODER_TYPE.endswith('deepsup') and not isinstance(pred_deepsup, list):
                 pred_deepsup = [pred_deepsup]
-            pred_semseg = nn.functional.log_softmax(pred, dim=1)
-            pred_semseg=nn.functional.interpolate(pred_semseg,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
-            loss = self.crit(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
+            pred_semseg=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
+            loss = self.loss_semseg(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
             return_dict['losses']['loss_semseg'] = loss
             acc = self.pixel_acc(pred_semseg, feed_dict[cfg.SEM.OUTPUT_PREFIX+'_0'])
             return_dict['metrics']['accuracy_pixel'] = acc
             if cfg.SEM.DECODER_TYPE.endswith('deepsup'):
                 for i in range(1, len(cfg.SEM.DOWNSAMPLE)):
-                    loss_deepsup = self.crit(pred_deepsup[i-1], 
+                    loss_deepsup = self.semseg(pred_deepsup[i-1], 
                         feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, i)])
                     loss = loss + loss_deepsup * self.deep_sup_scale[i]
             # pytorch0.4 bug on gathering scalar(0-dim) tensors

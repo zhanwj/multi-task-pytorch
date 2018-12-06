@@ -5,8 +5,8 @@ data/*
 pretrain_model
 /output
 /trainLog
-*.o
-*.so
+#*.o
+#*.so
 *.log
 *.swp
 *.txt
@@ -15,10 +15,11 @@ pretrain_model
 *.jpg
 *.pkl
 *.t7
-*.h
-*.cu
-*.c
+#*.h
+#*.cu
+#*.c
 *.json
+*.sh
 updategit.sh
 multi-task-pytorch
 seg_pred_pic

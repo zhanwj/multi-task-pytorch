@@ -440,6 +440,9 @@ __C.DISP.COST_VOLUME_TYPE = 'CorrelationLayer1D'
 __C.DISP.MERGE_ASPP = True
 __C.SEM.SPN_CONNECTION_WAYS = 3 
 __C.SEM.SPN_ITERS = 2
+__C.SEM.OHEM_ON = False
+__C.SEM.OHEM_POS = 0.9
+
 
 # ---------------------------------------------------------------------------- #
 # Model options
