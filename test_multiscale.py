@@ -140,7 +140,7 @@ class TestNet(object):
         pretrained=torch.load(self.pretrained_model, map_location=lambda storage, loc: storage)
         pretrained = pretrained['model']
         self.net.load_state_dict(pretrained,strict=False)
-        #self.net.to('cuda')
+        self.net.to('cuda')
         print("weights load success")
         self.net.eval()
 
@@ -292,13 +292,13 @@ def to_test_semseg(args):
             pred_deepsup_list = []
             one_list, image_name, index = test_net.transfer_img(image, image_name, scale, args)
             for isave, im in enumerate(one_list): #剪成多张图片 一张一张喂进去
-                #input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
-                input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False)
+                input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
+                #input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False)
                 pred_dict = test_net.net(input_data)
-                #pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
-                pred_list.append((pred_dict[args.prefix_semseg]))
-                #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())
-                pred_deepsup_list.append((pred_dict[args.prefix_average]))
+                pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
+                #pred_list.append((pred_dict[args.prefix_semseg]).detach().numpy())
+                pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())
+                #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().numpy())
             test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args) #之后将图片合起来
             test_net.save_pred(pred_deepsup_list, image_name + '_average', [scale, scale_i], index, args)
         test_net.save_multi_results(image_name,  args)
