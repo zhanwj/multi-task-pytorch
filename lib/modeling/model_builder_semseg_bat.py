@@ -114,6 +114,17 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             for p in self.Conv_Body.parameters():
                 p.requires_grad = False
 
+    def loss_ohem(self, pred_semseg, semseg_label):
+        b, c, h, w = pred_semseg.shape
+        prob_pos = F.softmax(pred_semseg, dim=1)
+        prob_pos = prob_pos.view(b, c, -1)
+        prob_pos = prob_pos[:, :, semseg_label.flatten())
+        prob_pos = (prob_pos > cfg.SEM.OHEM_POS).long()
+        prob_pos = prob_pos.view(semseg_label.shape)
+        semseg_label[prob_pos] = 255
+        loss = self.crit(pred_semseg, semseg_label)
+        return loss
+
     def forward(self, data, **feed_dict):
         return_dict = {}
         if self.training: # training

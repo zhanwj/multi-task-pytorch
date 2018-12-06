@@ -27,7 +27,7 @@ from datasets.roidb import combined_roidb_for_training, combined_roidb_for_train
 from modeling.model_builder import Generalized_RCNN
 from modeling.model_builder_3DSD import Generalized_3DSD
 from modeling.model_builder_segdisp import Generalized_SEGDISP
-from modeling.model_builder_semseg_bat import Generalized_SEMSEG
+#from modeling.model_builder_semseg_bat import Generalized_SEMSEG
 from modeling.model_builder_psp_pretrained_test import Generalized_SEMSEG
 from modeling.model_builder_segcspn import Generalized_SEGCSPN
 from roi_data.loader import RoiDataLoader, MinibatchSampler, collate_minibatch, collate_minibatch_semseg
@@ -82,7 +82,7 @@ def argument():
     parser.add_argument('--pretrained_model', dest='premodel', help='path to pretrained model', default='./output/pspnet_poly_without_mulitScale/e2e_psp_pretrained_test/Dec05-03-35-50_localhost.localdomain/ckpt/model_39_178.pth', type=str)
     parser.add_argument('--prefix_semseg', dest='prefix_semseg', help='output name of network', default='pred_semseg', type=str)
     parser.add_argument('--prefix_disp', dest='prefix_disp', help='output name of network', default='pred_disp', type=str)
-    parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_semseg_average', type=str)
+    parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_deepsup', type=str)
     parser.add_argument('--index_start', dest='index_start', help='predict from index_start', default=0, type=int)
     parser.add_argument('--index_end', dest='index_end', help='predict end with index_end', default=500, type=int)
     args = parser.parse_args()
@@ -140,9 +140,9 @@ class TestNet(object):
         pretrained=torch.load(self.pretrained_model, map_location=lambda storage, loc: storage)
         pretrained = pretrained['model']
         self.net.load_state_dict(pretrained,strict=False)
-        self.net.to('cuda')
+        #self.net.to('cuda')
         print("weights load success")
-
+        self.net.eval()
 
 
         #checkpoint = torch.load(self.pretrained_model)
@@ -292,10 +292,13 @@ def to_test_semseg(args):
             pred_deepsup_list = []
             one_list, image_name, index = test_net.transfer_img(image, image_name, scale, args)
             for isave, im in enumerate(one_list): #剪成多张图片 一张一张喂进去
-                input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
+                #input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
+                input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False)
                 pred_dict = test_net.net(input_data)
-                pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
-                pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())
+                #pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
+                pred_list.append((pred_dict[args.prefix_semseg]))
+                #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())
+                pred_deepsup_list.append((pred_dict[args.prefix_average]))
             test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args) #之后将图片合起来
             test_net.save_pred(pred_deepsup_list, image_name + '_average', [scale, scale_i], index, args)
         test_net.save_multi_results(image_name,  args)

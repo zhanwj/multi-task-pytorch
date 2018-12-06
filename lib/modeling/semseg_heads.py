@@ -407,7 +407,7 @@ class PPMBilinear(nn.Module):
 # pyramid pooling, bilinear upsample
 class PPMBilinearDeepsup(nn.Module):
     def __init__(self, num_class=150, fc_dim=4096,
-                 use_softmax=False, pool_scales=(1, 2, 3, 6)):
+                 use_softmax=False, pool_scales=(2, 2, 3, 6)):
         super(PPMBilinearDeepsup, self).__init__()
         self.use_softmax = use_softmax
 
