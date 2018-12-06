@@ -49,7 +49,7 @@ __C.TRAIN.MAX_SIZE = 1000
 
 # Images *per GPU* in the training minibatch
 # Total images per minibatch = TRAIN.IMS_PER_BATCH * NUM_GPUS
-__C.TRAIN.IMS_PER_BATCH = 1
+__C.TRAIN.IMS_PER_BATCH = 2
 
 # RoI minibatch size *per image* (number of regions of interest [ROIs])
 # Total number of RoIs per training minibatch =
@@ -410,6 +410,11 @@ __C.SEM.PSPNET_PRETRAINED_WEIGHTS = ''
 __C.SEM.PSPNET_REQUIRES_GRAD = True
 __C.SEM.SD_DIM = 512
 __C.SEM.FPN_DIMS = [2048, 256]
+__C.SEM.SPN_ON = False
+__C.SEM.SPN_PRETRAINED = ''
+__C.SEM.SPN_CROPSIZE = [320, 320]
+__C.SEM.SPN_DIM = 32
+
 
 __C.SEM.USE_GE_BLOCK=False
 __C.SEM.USE_AWM_BLOCK=False
@@ -433,6 +438,8 @@ __C.DISP.DISPSEG_REQUIRES_GRAD = True
 __C.DISP.EXPECT_MAXDISP = 127
 __C.DISP.COST_VOLUME_TYPE = 'CorrelationLayer1D'
 __C.DISP.MERGE_ASPP = True
+__C.SEM.SPN_CONNECTION_WAYS = 3 
+__C.SEM.SPN_ITERS = 2
 
 # ---------------------------------------------------------------------------- #
 # Model options
@@ -608,6 +615,7 @@ __C.SOLVER.LR_POLICY = 'step'
 # Hyperparameter used by the specified policy
 # For 'step', the current LR is multiplied by SOLVER.GAMMA at each step
 __C.SOLVER.GAMMA = 0.1
+__C.SOLVER.POLY_POWER = 0.9
 
 # Uniform step size for 'steps' policy
 __C.SOLVER.STEP_SIZE = 30000

@@ -1,7 +1,7 @@
 #encoding=utf-8
 #图片处理
 import sys
-sys.path.append('./lib')
+#sys.path.append('./lib')
 #import optIO
 import numpy as np
 import time
@@ -35,14 +35,14 @@ def argument():
     parser = argparse.ArgumentParser(description='Process prediction.')
     parser.add_argument('--dataset', dest='dataset', help='give a dataset name', default='cityscapes', type=str)
     # parser.add_argument('--config', dest='config', help='which file to restore', default='configs/baselines/e2e_pspnet-101_2x.yaml', type=str)
-    parser.add_argument('--config', dest='config', help='which file to restore', default='configs/baselines/e2e_segdisp-R-50_1x_original.yaml', type=str)
+    parser.add_argument('--config', dest='config', help='which file to restore', default='configs/baselinese/e2e_psp_pretrained_test.yaml', type=str)
     parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/pred_segdisp_val_500_', type=str)
-    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[0], type=list)
-    parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[720, 720], type=int)
-    parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1440], type=int)
-    parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEGDISP', type=str)
+    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[2], type=list)
+    parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[512,1024], type=int)
+    parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1024], type=int)
+    parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
     # parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
-    parser.add_argument('--premodel', dest='premodel', help='path to pretrained model', default='./output/pspnet50_2gpu_single_scale/Oct20-12-41-16_localhost.localdomain/ckpt/model_17_1486.pth', type=str)
+    parser.add_argument('--pretrained_model', dest='premodel', help='path to pretrained model', default='.output/pspnet_poly_without_mulitScale/e2e_psp_pretrained_test/Dec05-03-35-50_localhost.localdomain/ckpt/model_39_178.pth', type=str)
     parser.add_argument('--prefix_semseg', dest='prefix_semseg', help='output name of network', default='pred_semseg', type=str)
     parser.add_argument('--prefix_disp', dest='prefix_disp', help='output name of network', default='pred_disp', type=str)
     parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_semseg_average', type=str)
@@ -67,7 +67,7 @@ class TestNet(object):
         if args.dataset == 'cityscapes':
             self.input_size = args.input_size
             self.aug_scale = args.aug_scale
-            self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/val.txt')
+            self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/Cityscape_disp_SegFlow_val.txt')
             # self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/label_info_fine/test.txt')
             #self.label_root = os.path.join(os.getcwd(),'citycapes/label_info/onlytrain_label_citycapes_right.txt')
             self.num_class = 19
@@ -93,8 +93,7 @@ class TestNet(object):
         self.net = eval(args.network)()
         #init weight
         # pretrained_model = args.premodel
-        pretrained_model = './output/DispSeg_R50d8_with_ppm_bilinear_1X/e2e_segdisp-R-50_1x/Oct29-14-25-06_localhost.localdomain/ckpt/model_35_1486.pth'
-        checkpoint = torch.load(pretrained_model)
+        checkpoint = torch.load(self.pretrained_model)
         self.net.load_state_dict(checkpoint['model'])
         self.net.to('cuda')
         self.net.eval()

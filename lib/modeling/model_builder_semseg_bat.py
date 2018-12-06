@@ -75,7 +75,7 @@ class SegmentationModuleBase(nn.Module):
 
     def pixel_acc(self, pred, label):
         _, preds = torch.max(pred, dim=1)
-        valid = (label >= 0).long()
+        valid = (label!=255).long()
         acc_sum = torch.sum((preds == label).long())
         pixel_sum = torch.sum(valid)
         acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
@@ -105,7 +105,7 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 weights='')
         self.crit = nn.NLLLoss(ignore_index=255)
         self.deep_sup_scale = cfg.SEM.DEEP_SUB_SCALE
-
+        self.flag = 0
     def _init_modules(self):
         if cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS:
             resnet_utils.load_pretrained_imagenet_weights(self)
@@ -125,7 +125,8 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 pred = self.decoder(self.encoder(data, return_feature_maps=True))
             if cfg.SEM.DECODER_TYPE.endswith('deepsup') and not isinstance(pred_deepsup, list):
                 pred_deepsup = [pred_deepsup]
-            pred_semseg=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
+            pred_semseg = nn.functional.log_softmax(pred, dim=1)
+            pred_semseg=nn.functional.interpolate(pred_semseg,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
             loss = self.crit(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
             return_dict['losses']['loss_semseg'] = loss
             acc = self.pixel_acc(pred_semseg, feed_dict[cfg.SEM.OUTPUT_PREFIX+'_0'])

@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
 import torchvision
-from . import resnet as resnet
-from core.config import  cfg
+from . import resnet, resnext
 from lib.nn import SynchronizedBatchNorm2d
-
-
+import math
+from modeling.backbone import build_backbone
+from modeling.aspp import build_aspp
+BatchNorm = SynchronizedBatchNorm2d
 class SegmentationModuleBase(nn.Module):
     def __init__(self):
         super(SegmentationModuleBase, self).__init__()
@@ -26,24 +27,23 @@ class SegmentationModule(SegmentationModuleBase):
         self.decoder = net_dec
         self.crit = crit
         self.deep_sup_scale = deep_sup_scale
+
     def forward(self, feed_dict, *, segSize=None):
         if segSize is None: # training
             if self.deep_sup_scale is not None: # use deep supervision technique
-                (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['data'], return_feature_maps=True))
+                (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
             else:
-                pred = self.decoder(self.encoder(feed_dict['data'], return_feature_maps=True))
+                pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
 
-            loss = self.crit(pred, feed_dict[cfg.SEM.OUTPUT_PRIFEX+'_0'])
+            loss = self.crit(pred, feed_dict['seg_label'])
             if self.deep_sup_scale is not None:
-                for i in range(2, len(cfg.SEM.DOWNSAMPLE)):
-                    loss_deepsup = self.crit(pred_deepsup, 
-                            feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PRIFEX, i)])
-                    loss = loss + loss_deepsup * self.deep_sup_scale[i]
+                loss_deepsup = self.crit(pred_deepsup, feed_dict['seg_label'])
+                loss = loss + loss_deepsup * self.deep_sup_scale
 
-            acc = self.pixel_acc(pred, feed_dict[cfg.SEM.OUTPUT_PRIFEX+'_0'])
+            acc = self.pixel_acc(pred, feed_dict['seg_label'])
             return loss, acc
         else: # inference
-            pred = self.decoder(self.encoder(feed_dict['data'], return_feature_maps=True), segSize=segSize)
+            pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True), segSize=segSize)
             return pred
 
 
@@ -125,6 +125,8 @@ class ModelBuilder():
         elif arch == 'resnext101':
             orig_resnext = resnext.__dict__['resnext101'](pretrained=pretrained)
             net_encoder = Resnet(orig_resnext) # we can still use class Resnet
+        elif arch == 'xception':
+            net_encoder=build_backbone('xception', 16, BatchNorm)
         else:
             raise Exception('Architecture undefined!')
 
@@ -158,11 +160,6 @@ class ModelBuilder():
                 num_class=num_class,
                 fc_dim=fc_dim,
                 use_softmax=use_softmax)
-        elif arch == 'ppm_bilinear_3Ddeepsup':
-            net_decoder = PPMBilinear3DDeepsup(
-                num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
         elif arch == 'upernet_lite':
             net_decoder = UPerNet(
                 num_class=num_class,
@@ -181,6 +178,9 @@ class ModelBuilder():
                 fc_dim=fc_dim,
                 use_softmax=use_softmax,
                 fpn_dim=512)
+        elif arch == 'deeplab':
+            net_decoder = Deeplab(
+                low_level_inplanes=512)
         else:
             raise Exception('Architecture undefined!')
 
@@ -277,6 +277,7 @@ class ResnetDilated(nn.Module):
 
     def forward(self, x, return_feature_maps=False):
         conv_out = []
+
         x = self.relu1(self.bn1(self.conv1(x)))
         x = self.relu2(self.bn2(self.conv2(x)))
         x = self.relu3(self.bn3(self.conv3(x)))
@@ -304,7 +305,7 @@ class C1BilinearDeepSup(nn.Module):
         # last conv
         self.conv_last = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
         self.conv_last_deepsup = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
-        self.conv_last_last = nn.Conv2d(num_class*2,cfg.SEM.SD_DIM,3,1,1)
+
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
 
@@ -312,7 +313,7 @@ class C1BilinearDeepSup(nn.Module):
         x = self.conv_last(x)
 
         if self.use_softmax:  # is True during inference
-            x = nn.functional.interpolate(
+            x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
             return x
@@ -325,7 +326,7 @@ class C1BilinearDeepSup(nn.Module):
         x = nn.functional.log_softmax(x, dim=1)
         _ = nn.functional.log_softmax(_, dim=1)
 
-        return self.conv_last_last(torch.cat((x,_),dim=1))
+        return (x, _)
 
 
 # last conv, bilinear upsample
@@ -345,7 +346,7 @@ class C1Bilinear(nn.Module):
         x = self.conv_last(x)
 
         if self.use_softmax: # is True during inference
-            x = nn.functional.interpolate(
+            x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
         else:
@@ -371,13 +372,11 @@ class PPMBilinear(nn.Module):
             ))
         self.ppm = nn.ModuleList(self.ppm)
 
-        self.aspp_conv = nn.Sequential(
+        self.conv_last = nn.Sequential(
             nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
                       kernel_size=3, padding=1, bias=False),
             SynchronizedBatchNorm2d(512),
-            nn.ReLU(inplace=True)
-        )
-        self.conv_last = nn.Sequential(
+            nn.ReLU(inplace=True),
             nn.Dropout2d(0.1),
             nn.Conv2d(512, num_class, kernel_size=1)
         )
@@ -388,27 +387,26 @@ class PPMBilinear(nn.Module):
         input_size = conv5.size()
         ppm_out = [conv5]
         for pool_scale in self.ppm:
-            ppm_out.append(nn.functional.interpolate(
+            ppm_out.append(nn.functional.upsample(
                 pool_scale(conv5),
                 (input_size[2], input_size[3]),
                 mode='bilinear', align_corners=False))
         ppm_out = torch.cat(ppm_out, 1)
-        
-        x = self.aspp_conv(ppm_out)
 
-        self.conv_last(x)
+        x = self.conv_last(ppm_out)
+
         if self.use_softmax:  # is True during inference
-            x = nn.functional.interpolate(
+            x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
-        #else:
-        #    x = nn.functional.log_softmax(x, dim=1)
+        else:
+            x = nn.functional.log_softmax(x, dim=1)
         return x
 
 
 # pyramid pooling, bilinear upsample
 class PPMBilinearDeepsup(nn.Module):
-    def __init__(self, num_class=150, fc_dim=1024,
+    def __init__(self, num_class=150, fc_dim=4096,
                  use_softmax=False, pool_scales=(1, 2, 3, 6)):
         super(PPMBilinearDeepsup, self).__init__()
         self.use_softmax = use_softmax
@@ -435,14 +433,13 @@ class PPMBilinearDeepsup(nn.Module):
         self.conv_last_deepsup = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
         self.dropout_deepsup = nn.Dropout2d(0.1)
 
-
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
 
         input_size = conv5.size()
         ppm_out = [conv5]
         for pool_scale in self.ppm:
-            ppm_out.append(nn.functional.interpolate(
+            ppm_out.append(nn.functional.upsample(
                 pool_scale(conv5),
                 (input_size[2], input_size[3]),
                 mode='bilinear', align_corners=False))
@@ -450,8 +447,8 @@ class PPMBilinearDeepsup(nn.Module):
 
         x = self.conv_last(ppm_out)
 
-        if self.use_softmax :  # is True during inference
-            x = nn.functional.interpolate(
+        if self.use_softmax:  # is True during inference
+            x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
             return x
@@ -462,154 +459,14 @@ class PPMBilinearDeepsup(nn.Module):
         _ = self.dropout_deepsup(_)
         _ = self.conv_last_deepsup(_)
 
-        x = nn.functional.log_softmax(x, dim=1)
+        #x = nn.functional.log_softmax(x, dim=1)
         _ = nn.functional.log_softmax(_, dim=1)
 
         return (x, _)
 
-class PPMBilinear3DDeepsup(nn.Module):
-    def __init__(self, num_class=150, fc_dim=1024,
-                 use_softmax=False, pool_scales=(1, 2, 3, 6)):
-        super(PPMBilinear3DDeepsup, self).__init__()
-        self.use_softmax = use_softmax
-
-        self.ppm = []
-        for scale in pool_scales:
-            self.ppm.append(nn.Sequential(
-                nn.AdaptiveAvgPool2d(scale),
-                nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
-                SynchronizedBatchNorm2d(512),
-                nn.ReLU(inplace=True)
-            ))
-        self.ppm = nn.ModuleList(self.ppm)
-        self.cbr_deepsup = conv3x3_bn_relu(fc_dim // 2, fc_dim // 4, 1)
-
-        self.conv_last = nn.Sequential(
-            nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
-                      kernel_size=3, padding=1, bias=False),
-            SynchronizedBatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.Dropout2d(0.1),
-            nn.Conv2d(512, num_class, kernel_size=1)
-        )
-        self.conv_last_deepsup = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
-        self.dropout_deepsup = nn.Dropout2d(0.1)
-        
-    def forward(self, conv_out, segSize=None):
-        conv5 = conv_out[-1]
-
-        input_size = conv5.size()
-        ppm_out = [conv5]
-        for pool_scale in self.ppm:
-            ppm_out.append(nn.functional.interpolate(
-                pool_scale(conv5),
-                (input_size[2], input_size[3]),
-                mode='bilinear', align_corners=False))
-        ppm_out = torch.cat(ppm_out, 1)
-
-        x = self.conv_last(ppm_out)
-
-        # deep sup
-        conv4 = conv_out[-2]
-        _ = self.cbr_deepsup(conv4)
-        _ = self.dropout_deepsup(_)
-        _ = self.conv_last_deepsup(_)
-
-        pred_features = torch.cat((x,_),dim=1)
-        pred_semseg, _ = torch.split(x, cfg.TRAIN.IMS_PER_BATCH, dim=0)
-        return pred_features, pred_semseg
 
 # upernet
 class UPerNet(nn.Module):
-    def __init__(self, num_class=19, fc_dim=2048,
-                 use_softmax=False, pool_scales=(1, 2, 3, 6),
-                 fpn_inplanes=(256,512,1024,2048), fpn_dim=256):
-        super(UPerNet, self).__init__()
-        self.use_softmax = use_softmax
-
-        # PPM Module
-        self.ppm_pooling = []
-        self.ppm_conv = []
-
-        for scale in pool_scales:
-            self.ppm_pooling.append(nn.AdaptiveAvgPool2d(scale))
-            self.ppm_conv.append(nn.Sequential(
-                nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
-                SynchronizedBatchNorm2d(512),
-                nn.ReLU(inplace=True)
-            ))
-        self.ppm_pooling = nn.ModuleList(self.ppm_pooling)
-        self.ppm_conv = nn.ModuleList(self.ppm_conv)
-        self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1)
-
-        # FPN Module
-        self.fpn_in = []
-        for fpn_inplane in fpn_inplanes[:-1]: # skip the top layer
-            self.fpn_in.append(nn.Sequential(
-                nn.Conv2d(fpn_inplane, fpn_dim, kernel_size=1, bias=False),
-                SynchronizedBatchNorm2d(fpn_dim),
-                nn.ReLU(inplace=True)
-            ))
-        self.fpn_in = nn.ModuleList(self.fpn_in)
-
-        self.fpn_out = []
-        for i in range(len(fpn_inplanes) - 1): # skip the top layer
-            self.fpn_out.append(nn.Sequential(
-                conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
-            ))
-        self.fpn_out = nn.ModuleList(self.fpn_out)
-
-        self.conv_last = nn.Sequential(
-            conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
-            nn.Conv2d(fpn_dim, num_class, kernel_size=1)
-        )
-
-    def forward(self, conv_out, segSize=None):
-        conv5 = conv_out[-1]
-
-        input_size = conv5.size()
-        ppm_out = [conv5]
-        for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv):
-            ppm_out.append(pool_conv(nn.functional.interpolate(
-                pool_scale(conv5),
-                (input_size[2], input_size[3]),
-                mode='bilinear', align_corners=False)))
-        ppm_out = torch.cat(ppm_out, 1)
-        f = self.ppm_last_conv(ppm_out)
-
-        fpn_feature_list = [f]
-        for i in reversed(range(len(conv_out) - 1)):
-            conv_x = conv_out[i]
-            conv_x = self.fpn_in[i](conv_x) # lateral branch
-
-            f = nn.functional.interpolate(
-                f, size=conv_x.size()[2:], mode='bilinear', align_corners=False) # top-down branch
-            f = conv_x + f
-
-            fpn_feature_list.append(self.fpn_out[i](f))
-
-        fpn_feature_list.reverse() # [P2 - P5]
-        output_size = fpn_feature_list[0].size()[2:]
-        fusion_list = [fpn_feature_list[0]]
-        for i in range(1, len(fpn_feature_list)):
-            fusion_list.append(nn.functional.interpolate(
-                fpn_feature_list[i],
-                output_size,
-                mode='bilinear', align_corners=False))
-        fusion_out = torch.cat(fusion_list, 1)
-        x = self.conv_last(fusion_out)
-
-        if self.use_softmax:  # is True during inference
-            x = nn.functional.interpolate(
-                x, size=segSize, mode='bilinear', align_corners=False)
-            x = nn.functional.softmax(x, dim=1)
-            return x
-
-        x = nn.functional.log_softmax(x, dim=1)
-
-        return x
-# cspn upernet
-class UPerNetCspn(nn.Module):
     def __init__(self, num_class=150, fc_dim=4096,
                  use_softmax=False, pool_scales=(1, 2, 3, 6),
                  fpn_inplanes=(256,512,1024,2048), fpn_dim=256):
@@ -659,7 +516,7 @@ class UPerNetCspn(nn.Module):
         input_size = conv5.size()
         ppm_out = [conv5]
         for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv):
-            ppm_out.append(pool_conv(nn.functional.interpolate(
+            ppm_out.append(pool_conv(nn.functional.upsample(
                 pool_scale(conv5),
                 (input_size[2], input_size[3]),
                 mode='bilinear', align_corners=False)))
@@ -671,7 +528,7 @@ class UPerNetCspn(nn.Module):
             conv_x = conv_out[i]
             conv_x = self.fpn_in[i](conv_x) # lateral branch
 
-            f = nn.functional.interpolate(
+            f = nn.functional.upsample(
                 f, size=conv_x.size()[2:], mode='bilinear', align_corners=False) # top-down branch
             f = conv_x + f
 
@@ -681,7 +538,7 @@ class UPerNetCspn(nn.Module):
         output_size = fpn_feature_list[0].size()[2:]
         fusion_list = [fpn_feature_list[0]]
         for i in range(1, len(fpn_feature_list)):
-            fusion_list.append(nn.functional.interpolate(
+            fusion_list.append(nn.functional.upsample(
                 fpn_feature_list[i],
                 output_size,
                 mode='bilinear', align_corners=False))
@@ -689,7 +546,7 @@ class UPerNetCspn(nn.Module):
         x = self.conv_last(fusion_out)
 
         if self.use_softmax:  # is True during inference
-            x = nn.functional.interpolate(
+            x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
             return x
@@ -697,3 +554,51 @@ class UPerNetCspn(nn.Module):
         x = nn.functional.log_softmax(x, dim=1)
 
         return x
+
+
+class Deeplab(nn.Module):
+    def __init__(self, low_level_inplanes):
+        super(Deeplab, self).__init__()
+
+        #aspp
+        self.aspp = build_aspp(backbone, 16, BatchNorm)
+        #decoder
+        self.conv1 = nn.Conv2d(low_level_inplanes, 48, 1, bias=False)
+        self.bn1 = BatchNorm(48)
+        self.relu = nn.ReLU()
+        self.last_conv = nn.Sequential(nn.Conv2d(304, 256, kernel_size=3, stride=1, padding=1, bias=False),
+                                       BatchNorm(256),
+                                       nn.ReLU(),
+                                       nn.Dropout(0.5),
+                                       nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False),
+                                       BatchNorm(256),
+                                       nn.ReLU(),
+                                       nn.Dropout(0.1),
+                                       nn.Conv2d(256, cfg.MODEL.NUM_CLASSES, kernel_size=1, stride=1))
+        self._init_weight()
+
+
+    def forward(self, conv_out):
+        low_level_feat = conv_out[1]
+        x = self.aspp(conv_out[-1])
+        low_level_feat = self.conv1(low_level_feat)
+        low_level_feat = self.bn1(low_level_feat)
+        low_level_feat = self.relu(low_level_feat)
+
+        x = F.interpolate(x, size=low_level_feat.size()[2:], mode='bilinear', align_corners=True)
+        x = torch.cat((x, low_level_feat), dim=1)
+        x = self.last_conv(x)
+
+        return x
+
+    def _init_weight(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                torch.nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, SynchronizedBatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+

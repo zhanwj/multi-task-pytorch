@@ -2,27 +2,29 @@
 import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
+from core.config import  cfg
 import torch
 from torch.autograd import Variable
+
 
 class Affinity_Propagate(nn.Module):
     
     def __init__(self, spn = False):
         super(Affinity_Propagate, self).__init__()
         self.spn = spn
-
+        
 
     def forward(self, guidance, blur_depth, sparse_depth=None):
         
         # normalize features
-        gate1_w1_cmb = torch.abs(guidance.narrow(1,0,1))
-        gate2_w1_cmb = torch.abs(guidance.narrow(1,1,1))
-        gate3_w1_cmb = torch.abs(guidance.narrow(1,2,1))
-        gate4_w1_cmb = torch.abs(guidance.narrow(1,3,1))
-        gate5_w1_cmb = torch.abs(guidance.narrow(1,4,1))
-        gate6_w1_cmb = torch.abs(guidance.narrow(1,5,1))
-        gate7_w1_cmb = torch.abs(guidance.narrow(1,6,1))
-        gate8_w1_cmb = torch.abs(guidance.narrow(1,7,1))
+        gate1_w1_cmb = guidance.narrow(1,0,1)
+        gate2_w1_cmb = guidance.narrow(1,1,1)
+        gate3_w1_cmb = guidance.narrow(1,2,1)
+        gate4_w1_cmb = guidance.narrow(1,3,1)
+        gate5_w1_cmb = guidance.narrow(1,4,1)
+        gate6_w1_cmb = guidance.narrow(1,5,1)
+        gate7_w1_cmb = guidance.narrow(1,6,1)
+        gate8_w1_cmb = guidance.narrow(1,7,1)
         
         if sparse_depth is not None:
             sparse_mask = sparse_depth.sign()
@@ -31,7 +33,7 @@ class Affinity_Propagate(nn.Module):
             result_depth = blur_depth.clone()
         
         
-        for i in range(16):
+        for i in range(cfg.SEM.SPN_ITERS):
         # one propagation
             spn_kernel = 3 
             elewise_max_gate1 = self.eight_way_propagation(gate1_w1_cmb, result_depth, spn_kernel)
@@ -54,22 +56,35 @@ class Affinity_Propagate(nn.Module):
        
     
     def eight_way_propagation(self, weight_matrix, blur_matrix, kernel):
-        [batch_size, channels, height, width] = weight_matrix.size()
-        self.avg_conv = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=kernel, stride=1, padding=1, bias=False)
-        weight = torch.ones(1, 1, kernel, kernel).cuda()
-        weight[0,0,(kernel-1)//2,(kernel-1)//2]=0
+        if len(weight_matrix.shape)==5:
+            weight_matrix=weight_matrix.squeeze(1)
+        b, channels, h, w = blur_matrix.shape
+        self.groups=channels
+        self.avg_conv = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=kernel, groups=self.groups, stride=1, padding=1, bias=False)
+        weight = torch.ones(channels, channels//self.groups,  kernel, kernel).cuda()
+        weight[:,:,(kernel-1)//2,(kernel-1)//2]=0
         self.avg_conv.weight = nn.Parameter(weight)
         for param in self.avg_conv.parameters():
             param.requires_grad = False
 
-        self.sum_conv = nn.Conv2d(in_channels=1, out_channels=1, kernel_size=kernel, stride=1, padding=1, bias=False)
-        sum_weight = torch.ones(1, 1, kernel, kernel).cuda()
+        b, channels, h, w = weight_matrix.shape
+        self.groups = channels
+        self.sum_conv = nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=kernel,groups=self.groups, stride=1, padding=1, bias=False)
+        sum_weight = torch.ones(channels, channels//self.groups, kernel, kernel).cuda()
         self.sum_conv.weight = nn.Parameter(sum_weight)
         for param in self.sum_conv.parameters():
             param.requires_grad = False
-        weight_sum = self.sum_conv(weight_matrix)
-        avg_sum = self.avg_conv((weight_matrix*blur_matrix))
-        out = (torch.div(weight_matrix, weight_sum))*blur_matrix + torch.div(avg_sum, weight_sum)
+
+        weight_abs = torch.abs(weight_matrix)
+        weight_sum = self.sum_conv(weight_abs)
+        weight_matrix = torch.div(weight_matrix, weight_sum)
+        assert torch.sum(weight_matrix>1)*torch.sum(weight_matrix<-1)==0, 'weight_matrix is wrong'
+        avg_sum = self.avg_conv(weight_matrix*blur_matrix)
+        out = weight_matrix*blur_matrix + avg_sum
+        del self.avg_conv
+        del self.sum_conv
+        del sum_weight
+        del weight
         return out
         
     def normalize_gate(self, guidance):
