@@ -458,7 +458,6 @@ class PPMBilinearDeepsup(nn.Module):
         _ = self.dropout_deepsup(_)
         _ = self.conv_last_deepsup(_)
 
-        _ = nn.functional.log_softmax(_, dim=1)
 
         return (x, _)
 

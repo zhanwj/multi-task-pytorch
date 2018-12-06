@@ -28,7 +28,6 @@ from modeling.model_builder import Generalized_RCNN
 from modeling.model_builder_3DSD import Generalized_3DSD
 from modeling.model_builder_segdisp import Generalized_SEGDISP
 from modeling.model_builder_semseg_bat import Generalized_SEMSEG
-from modeling.model_builder_psp_pretrained_test import Generalized_SEMSEG
 from modeling.model_builder_segcspn import Generalized_SEGCSPN
 from roi_data.loader import RoiDataLoader, MinibatchSampler, collate_minibatch, collate_minibatch_semseg
 from utils.detectron_weight_helper import load_detectron_weight

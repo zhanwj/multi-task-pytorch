@@ -133,7 +133,7 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             return_dict['metrics']['accuracy_pixel'] = acc
             if cfg.SEM.DECODER_TYPE.endswith('deepsup'):
                 for i in range(1, len(cfg.SEM.DOWNSAMPLE)):
-                    loss_deepsup = self.crit(pred_deepsup[i-1], 
+                    loss_deepsup = self.loss_semseg(pred_deepsup[i-1], 
                         feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, i)])
                     loss = loss + loss_deepsup * self.deep_sup_scale[i]
             # pytorch0.4 bug on gathering scalar(0-dim) tensors

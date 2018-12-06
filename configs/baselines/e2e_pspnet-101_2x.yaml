@@ -18,7 +18,7 @@ SEM:
     DEEP_SUB_SCALE: [1.0, 0.4]
     DOWNSAMPLE: [0, 3]
     OUTPUT_PREFIX: 'semseg_label'
-    OHEM_ON: True
+    OHEM_ON: False
     OHEM_POS: 0.8
 DISP:
     DISP_ON: False

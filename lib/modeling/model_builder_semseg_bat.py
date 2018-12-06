@@ -110,7 +110,6 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         if not cfg.SEM.OHEM_ON:
             self.loss_semseg = self.loss_norm
         else:
-            self.scan = torch.arange(cfg.MODEL.NUM_CLASSSES).view(1, cfg.MODEL.NUM_CLASSSES, 1, 1).cuda()
             self.loss_semseg = self.loss_ohem
 
     def _init_modules(self):
@@ -127,13 +126,16 @@ class Generalized_SEMSEG(SegmentationModuleBase):
 
     def loss_ohem(self, pred_semseg, semseg_label):
         b, c, h, w = pred_semseg.shape
+        scan = torch.arange(cfg.MODEL.NUM_CLASSES).view(1, cfg.MODEL.NUM_CLASSES, 1, 1).cuda()
         scan_pos = scan.repeat(b,1,1,1)
-        scan_pos = semseg_label == scan_pos
+        scan_pos = (semseg_label.unsqueeze(1) == scan_pos).float()
         prob_pos = torch.softmax(pred_semseg, dim=1)
         prob_pos = torch.sum(prob_pos*scan_pos, dim=1)
         semseg_label[prob_pos>cfg.SEM.OHEM_POS] = 255
         pred_semseg = F.log_softmax(pred_semseg, dim=1)
         loss = self.crit(pred_semseg, semseg_label)
+        del scan_pos 
+        del scan
         return loss
 
     def forward(self, data, **feed_dict):
@@ -154,7 +156,7 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             return_dict['metrics']['accuracy_pixel'] = acc
             if cfg.SEM.DECODER_TYPE.endswith('deepsup'):
                 for i in range(1, len(cfg.SEM.DOWNSAMPLE)):
-                    loss_deepsup = self.semseg(pred_deepsup[i-1], 
+                    loss_deepsup = self.loss_semseg(pred_deepsup[i-1], 
                         feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, i)])
                     loss = loss + loss_deepsup * self.deep_sup_scale[i]
             # pytorch0.4 bug on gathering scalar(0-dim) tensors
