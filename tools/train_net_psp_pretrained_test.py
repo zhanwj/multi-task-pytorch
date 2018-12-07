@@ -334,10 +334,15 @@ def main():
 
     if cfg.SOLVER.TYPE == "SGD":
         optimizer = torch.optim.SGD(params, momentum=cfg.SOLVER.MOMENTUM)
+    if cfg.SOLVER.TYPE == 'SGD' and cfg.SOLVER.LR_POLICY == 'ReduceLROnPlateau':
+        optimizer = torch.optim.SGD(params, momentum=cfg.SOLVER.MOMENTUM)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min',patience=5)
+        print("Using ReduceLROnPlateau as Lr reduce policy!")
     elif cfg.SOLVER.TYPE == "Adam":
         optimizer = torch.optim.Adam(params)
     elif cfg.SOLVER.TYPE == "poly":
         optimizer = create_optimizers(maskRCNN,args)
+        print("Using Poly as Lr reduce policy!")
 
     args.max_iters = (int(train_size / args.batch_size)) * args.num_epochs
     ### Load checkpoint
@@ -415,6 +420,8 @@ def main():
                 net_utils.decay_learning_rate(optimizer, lr, cfg.SOLVER.GAMMA)
                 lr *= cfg.SOLVER.GAMMA
 
+            
+
             for args.step, input_data in zip(range(args.start_iter, iters_per_epoch), dataloader):
                 
                 if cfg.DISP.DISP_ON:
@@ -444,6 +451,8 @@ def main():
                 optimizer.step()
                 if cfg.SOLVER.TYPE=='poly':
                     lr = adjust_learning_rate(optimizer, global_step, args)
+                
+                
                 training_stats.IterToc()
 
                 if args.step % args.disp_interval == 0:
@@ -455,6 +464,9 @@ def main():
                 global_step += 1
             # ---- End of epoch ----
             # save checkpoint
+            if cfg.SOLVER.TYPE == 'SGD' and cfg.SOLVER.LR_POLICY == 'ReduceLROnPlateau':
+                    lr_scheduler.step(loss)
+                    lr = optimizer.param_groups[0]['lr']
             
             net_utils.save_ckpt(output_dir, args, maskRCNN, optimizer)
             # reset starting iter number after first epoch

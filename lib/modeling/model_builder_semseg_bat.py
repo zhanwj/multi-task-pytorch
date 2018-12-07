@@ -165,8 +165,21 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             for k, v in return_dict['metrics'].items():
                 return_dict['metrics'][k] = v.unsqueeze(0)
         else: # inference
-            pred = self.decoder(self.encoder(data, return_feature_maps=True), segSize=segSize)
-            return_dict['pred_semseg'] = pred
+            if cfg.SEM.DECODER_TYPE.endswith('deepsup'): # use deep supervision technique
+                (pred, pred_deepsup) = self.decoder(self.encoder(data, return_feature_maps=True))
+                pred=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
+                pred_deepsup=nn.functional.interpolate(pred_deepsup,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
+                pred = F.softmax(pred, dim=1)
+                pred_deepsup = F.softmax(pred_deepsup, dim=1)
+                return_dict['pred_semseg']=pred
+                return_dict['pred_deepsup']=pred_deepsup
+            else:
+                pred = self.decoder(self.encoder(data, return_feature_maps=True))
+                pred=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
+                pred = F.softmax(pred, dim=1)
+                return_dict['pred_semseg']=pred
+        return return_dict
+
 
         return return_dict
 

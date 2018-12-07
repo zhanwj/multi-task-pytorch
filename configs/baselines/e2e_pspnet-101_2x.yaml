@@ -1,5 +1,5 @@
 MODEL:
-  TYPE: generalized_semseg
+  #TYPE: generalized_semseg
   TYPE: Generalized_SEMSEG
   CONV_BODY: ResNet.ResNet50_conv4_body
   FASTER_RCNN: False
@@ -11,21 +11,22 @@ SEM:
     UNION: False
     FC_DIM: 2048
     DIM: 512
-    INPUT_SIZE: [224, 224]
+    INPUT_SIZE: [720, 720]
     TRAINSET: 'train'
     ARCH_ENCODER: 'resnet50_dilated8'
     DECODER_TYPE: 'ppm_bilinear_deepsup'
     DEEP_SUB_SCALE: [1.0, 0.4]
     DOWNSAMPLE: [0, 3]
     OUTPUT_PREFIX: 'semseg_label'
-    OHEM_ON: False
-    OHEM_POS: 0.8
+    OHEM_ON: True
+    OHEM_POS: 0.9
 DISP:
     DISP_ON: False
 NUM_GPUS: 8
 SOLVER:
   WEIGHT_DECAY: 0.0001
-  LR_POLICY: steps_with_decay
+  TYPE: 'SGD'
+  LR_POLICY: 'ReduceLROnPlateau'
   BASE_LR: 0.02
   GAMMA: 0.1
   MAX_ITER: 180000
@@ -40,7 +41,7 @@ FAST_RCNN:
   ROI_XFORM_RESOLUTION: 7
   ROI_XFORM_SAMPLING_RATIO: 2
 TRAIN:
-  SCALES: (1440,)
+  SCALES: (1024,1536,2048,3072,1260,3584)
   MAX_SIZE: 1440
   BATCH_SIZE_PER_IM: 512
   RPN_PRE_NMS_TOP_N: 2000  # Per FPN level
@@ -50,4 +51,4 @@ TEST:
   NMS: 0.5
   RPN_PRE_NMS_TOP_N: 1000  # Per FPN level
   RPN_POST_NMS_TOP_N: 1000
-OUTPUT_DIR: ./output
+OUTPUT_DIR: ./output/pspnet50_multiscale_ReduceLROnPlateau_40epochs_720

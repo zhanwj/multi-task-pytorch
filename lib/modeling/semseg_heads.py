@@ -6,6 +6,8 @@ from lib.nn import SynchronizedBatchNorm2d
 import math
 from modeling.backbone import build_backbone
 from modeling.aspp import build_aspp
+from modeling.cspn import Affinity_Propagate
+from core.config import cfg
 BatchNorm = SynchronizedBatchNorm2d
 class SegmentationModuleBase(nn.Module):
     def __init__(self):
@@ -168,6 +170,12 @@ class ModelBuilder():
                 fpn_dim=256)
         elif arch == 'upernet':
             net_decoder = UPerNet(
+                num_class=num_class,
+                fc_dim=fc_dim,
+                use_softmax=use_softmax,
+                fpn_dim=512)
+        elif arch == 'cspn_upernet':
+            net_decoder = CspnUPerNet(
                 num_class=num_class,
                 fc_dim=fc_dim,
                 use_softmax=use_softmax,
@@ -406,7 +414,7 @@ class PPMBilinear(nn.Module):
 # pyramid pooling, bilinear upsample
 class PPMBilinearDeepsup(nn.Module):
     def __init__(self, num_class=150, fc_dim=4096,
-                 use_softmax=False, pool_scales=(2, 2, 3, 6)):
+                 use_softmax=False, pool_scales=(1, 2, 3, 6)):
         super(PPMBilinearDeepsup, self).__init__()
         self.use_softmax = use_softmax
 
@@ -548,7 +556,6 @@ class UPerNet(nn.Module):
             x = nn.functional.softmax(x, dim=1)
             return x
 
-
         return x
 
 
@@ -598,3 +605,102 @@ class Deeplab(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
+# upernet+cspn
+class CspnUPerNet(nn.Module):
+    def __init__(self, num_class=150, fc_dim=4096,
+                 use_softmax=False, pool_scales=(1, 2, 3, 6),
+                 fpn_inplanes=(256,512,1024,2048), fpn_dim=256):
+        super(CspnUPerNet, self).__init__()
+        self.use_softmax = use_softmax
+
+        # PPM Module
+        self.ppm_pooling = []
+        self.ppm_conv = []
+
+        for scale in pool_scales:
+            self.ppm_pooling.append(nn.AdaptiveAvgPool2d(scale))
+            self.ppm_conv.append(nn.Sequential(
+                nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(512),
+                nn.ReLU(inplace=True)
+            ))
+        self.ppm_pooling = nn.ModuleList(self.ppm_pooling)
+        self.ppm_conv = nn.ModuleList(self.ppm_conv)
+        self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1)
+
+        # FPN Module
+        self.fpn_in = []
+        for fpn_inplane in fpn_inplanes[:-1]: # skip the top layer
+            self.fpn_in.append(nn.Sequential(
+                nn.Conv2d(fpn_inplane, fpn_dim, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(fpn_dim),
+                nn.ReLU(inplace=True)
+            ))
+        self.fpn_in = nn.ModuleList(self.fpn_in)
+
+        self.fpn_out = []
+        for i in range(len(fpn_inplanes) - 1): # skip the top layer
+            self.fpn_out.append(nn.Sequential(
+                conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
+            ))
+        self.fpn_out = nn.ModuleList(self.fpn_out)
+
+        self.conv_last = nn.Sequential(
+            conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
+            nn.Conv2d(fpn_dim, num_class, kernel_size=1)
+        )
+        self.cspn_last = nn.Sequential(
+            nn.Conv2d(len(fpn_inplanes) * fpn_dim, 8*cfg.MODEL.NUM_CLASSES, 3, padding=1),
+            SynchronizedBatchNorm2d(8*cfg.MODEL.NUM_CLASSES),
+        )
+        self.cspn_net = Affinity_Propagate()
+    def forward(self, conv_out, segSize=None):
+        conv5 = conv_out[-1]
+
+        input_size = conv5.size()
+        ppm_out = [conv5]
+        for pool_scale, pool_conv in zip(self.ppm_pooling, self.ppm_conv):
+            ppm_out.append(pool_conv(nn.functional.upsample(
+                pool_scale(conv5),
+                (input_size[2], input_size[3]),
+                mode='bilinear', align_corners=False)))
+        ppm_out = torch.cat(ppm_out, 1)
+        f = self.ppm_last_conv(ppm_out)
+
+        fpn_feature_list = [f]
+        for i in reversed(range(len(conv_out) - 1)):
+            conv_x = conv_out[i]
+            conv_x = self.fpn_in[i](conv_x) # lateral branch
+
+            f = nn.functional.upsample(
+                f, size=conv_x.size()[2:], mode='bilinear', align_corners=False) # top-down branch
+            f = conv_x + f
+
+            fpn_feature_list.append(self.fpn_out[i](f))
+
+        fpn_feature_list.reverse() # [P2 - P5]
+        output_size = fpn_feature_list[0].size()[2:]
+        fusion_list = [fpn_feature_list[0]]
+        for i in range(1, len(fpn_feature_list)):
+            fusion_list.append(nn.functional.upsample(
+                fpn_feature_list[i],
+                output_size,
+                mode='bilinear', align_corners=False))
+        fusion_out = torch.cat(fusion_list, 1)
+        x = self.conv_last(fusion_out)
+        guidance = self.cspn_last(fusion_out)
+
+        x= nn.functional.upsample(x, scale_factor=2, mode='bilinear', align_corners=False)
+        guidance= nn.functional.upsample(guidance, scale_factor=2, mode='bilinear', align_corners=False)
+
+        b, c, h , w = guidance.shape
+        guidance = guidance.view(b, 8, -1, h, w)
+        x = self.cspn_net(guidance, x)
+
+        if self.use_softmax:  # is True during inference
+            x = nn.functional.upsample(
+                x, size=segSize, mode='bilinear', align_corners=False)
+            x = nn.functional.softmax(x, dim=1)
+            return x
+
+        return x

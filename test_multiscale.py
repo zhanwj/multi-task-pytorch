@@ -27,8 +27,7 @@ from datasets.roidb import combined_roidb_for_training, combined_roidb_for_train
 from modeling.model_builder import Generalized_RCNN
 from modeling.model_builder_3DSD import Generalized_3DSD
 from modeling.model_builder_segdisp import Generalized_SEGDISP
-#from modeling.model_builder_semseg_bat import Generalized_SEMSEG
-from modeling.model_builder_psp_pretrained_test import Generalized_SEMSEG
+from modeling.model_builder_semseg_bat import Generalized_SEMSEG
 from modeling.model_builder_segcspn import Generalized_SEGCSPN
 from roi_data.loader import RoiDataLoader, MinibatchSampler, collate_minibatch, collate_minibatch_semseg
 from utils.detectron_weight_helper import load_detectron_weight
@@ -72,14 +71,14 @@ def argument():
     parser = argparse.ArgumentParser(description='Process prediction.')
     parser.add_argument('--dataset', dest='dataset', help='give a dataset name', default='cityscapes', type=str)
     # parser.add_argument('--config', dest='config', help='which file to restore', default='configs/baselines/e2e_pspnet-101_2x.yaml', type=str)
-    parser.add_argument('--config', dest='config', help='which file to restore', default='./configs/baselines/e2e_psp_pretrained_test.yaml', type=str)
-    parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/pred_segdisp_val_500_', type=str)
-    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[2], type=list)
+    parser.add_argument('--config', dest='config', help='which file to restore', default='./configs/baselines/e2e_ubernet-101_2x.yaml', type=str)
+    parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/pred_segdisp_val_500_ubernet50_step/', type=str)
+    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[1], type=list)
     parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[512,1024], type=int)
-    parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1024], type=int)
+    parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1440], type=int)
     parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
     # parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
-    parser.add_argument('--pretrained_model', dest='premodel', help='path to pretrained model', default='./output/pspnet_poly_without_mulitScale/e2e_psp_pretrained_test/Dec05-03-35-50_localhost.localdomain/ckpt/model_39_178.pth', type=str)
+    parser.add_argument('--pretrained_model', dest='premodel', help='path to pretrained model', default='./output/e2e_ubernet-res50_2x/Dec05-11-05-31_GPU-cluster-2/ckpt/model_35_1486.pth', type=str)
     parser.add_argument('--prefix_semseg', dest='prefix_semseg', help='output name of network', default='pred_semseg', type=str)
     parser.add_argument('--prefix_disp', dest='prefix_disp', help='output name of network', default='pred_disp', type=str)
     parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_deepsup', type=str)
@@ -168,11 +167,8 @@ class TestNet(object):
 
     # put image left and right into it, sparetion
     def transfer_img(self, image, imgname, scale, args): #将图片切分成多块
-        #image = cv2.imread(imgname)
-        #image = cv2.resize(image, None,None,fx=scale,fy=scale, interpolation=cv2.INTER_NEAREST)
         resize_h = scale // 2
         resize_w = scale
-        cv2.resize(image, (resize_w, resize_h))
         image = np.array(cv2.resize(image, (resize_w, resize_h)))
         im_shape = image.shape[:2] #720 1440
         step_h = int(np.ceil(1.0*im_shape[0] / args.input_size[0]))
@@ -199,6 +195,8 @@ class TestNet(object):
 
     def save_pred(self, pred_list, image_name, scale_info, index, args): #拼起来
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
+        assert np.all(list(pred_list[0].shape[2:]) == args.input_size), 'pred size is not same to input size'
+        assert np.all(pred_list[0] >=0), 'pred must be output of softmax'
         step_h, step_w = index
         scale, scale_i = scale_info
         for ih in range(step_h):
@@ -289,22 +287,23 @@ def to_test_semseg(args):
         image, image_name = test_net.load_image(args)
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
             pred_list = [] ##预测的数据
-            pred_deepsup_list = []
+            #pred_deepsup_list = []
             one_list, image_name, index = test_net.transfer_img(image, image_name, scale, args)
-            for isave, im in enumerate(one_list): #剪成多张图片 一张一张喂进去
+            for isave, im in enumerate(one_list): #剪成c多张图片 一张一张喂进去
                 input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
                 #input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False)
                 pred_dict = test_net.net(input_data)
+                
                 pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
                 #pred_list.append((pred_dict[args.prefix_semseg]).detach().numpy())
-                pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())
+                #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())
                 #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().numpy())
             test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args) #之后将图片合起来
-            test_net.save_pred(pred_deepsup_list, image_name + '_average', [scale, scale_i], index, args)
+            #test_net.save_pred(pred_deepsup_list, image_name + '_average', [scale, scale_i], index, args)
         test_net.save_multi_results(image_name,  args)
-        test_net.save_multi_results(image_name + '_average',  args)
+        #test_net.save_multi_results(image_name + '_average',  args)
         cost_time = time.time() - time_now
-        print ('{} cost {}, remain time:{}'.format(image_name, cost_time, (args.index_end - i - 1)*cost_time))
+        print ('{} cost {}s , remain time:{}s '.format(image_name, cost_time, (args.index_end - i - 1)*cost_time))
 
 
 if __name__ == '__main__':

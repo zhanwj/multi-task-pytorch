@@ -21,7 +21,7 @@ pretrain_model
 *.c
 *.json
 *.sh
-lib/datasets/data
+lib/datasets/data/*
 updategit.sh
 multi-task-pytorch
 seg_pred_pic
