@@ -354,7 +354,7 @@ class C1BilinearDeepSup(nn.Module):
         x = self.cbr(conv5)
         x = self.conv_last(x)
 
-        if self.use_softmax:  # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -387,7 +387,7 @@ class C1Bilinear(nn.Module):
         x = self.cbr(conv5)
         x = self.conv_last(x)
 
-        if self.use_softmax: # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -437,7 +437,7 @@ class PPMBilinear(nn.Module):
 
         x = self.conv_last(ppm_out)
 
-        if self.use_softmax:  # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -488,7 +488,7 @@ class PPMBilinearDeepsup(nn.Module):
 
         x = self.conv_last(ppm_out)
 
-        if self.use_softmax:  # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -584,7 +584,7 @@ class UPerNet(nn.Module):
         fusion_out = torch.cat(fusion_list, 1)
         x = self.conv_last(fusion_out)
 
-        if self.use_softmax:  # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -626,7 +626,7 @@ class Deeplab(nn.Module):
         x = torch.cat((x, low_level_feat), dim=1)
         x = self.last_conv(x)
 
-        if self.use_softmax:  # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 spn_x, size=cfg.SEM.INPUT_SIZE, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -737,7 +737,7 @@ class CspnUPerNet(nn.Module):
         guidance = guidance.view(b, 8, -1, h, w)
         x = self.cspn_net(guidance, x)
 
-        if self.use_softmax:  # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -828,7 +828,7 @@ class SpnUPerNet(nn.Module):
         guidance= nn.functional.upsample(fusion_out, scale_factor=2, mode='bilinear', align_corners=False)
         spn_x = self.spn_net(x, guidance)
 
-        if self.use_softmax:  # is True during inference
+        if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 spn_x, size=cfg.SEM.INPUT_SIZE, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)

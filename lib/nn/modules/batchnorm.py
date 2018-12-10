@@ -41,7 +41,7 @@ class _SynchronizedBatchNorm(_BatchNorm):
 
         self._sync_master = SyncMaster(self._data_parallel_master)
 
-        self._is_parallel = self.training and False
+        self._is_parallel = False
         self._parallel_id = None
         self._slave_pipe = None
 

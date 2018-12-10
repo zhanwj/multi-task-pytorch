@@ -170,15 +170,11 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             for k, v in return_dict['metrics'].items():
                 return_dict['metrics'][k] = v.unsqueeze(0)
         else: # inference
-            if cfg.SEM.DECODER_TYPE.endswith('deepsup') or cfg.SEM.DECODER_TYPE.startswith('spn'): # use deep supervision technique
-                (pred, pred_deepsup) = self.decoder(self.encoder(data, return_feature_maps=True))
-                assert pred.shape[-1]==cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
-                return_dict['pred_semseg']=pred
-                return_dict['pred_deepsup']=pred_deepsup
-            else:
-                assert pred.shape[-1]==cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
-                pred = self.decoder(self.encoder(data, return_feature_maps=True))
-                return_dict['pred_semseg']=pred
+             pred = self.decoder(self.encoder(data, return_feature_maps=True), segSize=cfg.SEM.INPUT_SIZE)
+             assert pred.shape[1]==cfg.MODEL.NUM_CLASSES, 'need to predict for all class'
+             assert pred.shape[-1]==cfg.SEM.INPUT_SIZE[-1] and pred.shape[-2]==cfg.SEM.INPUT_SIZE[-2], 'need to output full size in semseg_heads'
+             assert torch.sum(pred<0)==0, 'need to output softmax in semseg_heads'
+             return_dict['pred_semseg']=pred
 
         return return_dict
 

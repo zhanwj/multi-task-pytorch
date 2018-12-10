@@ -72,7 +72,7 @@ def argument():
     parser.add_argument('--dataset', dest='dataset', help='give a dataset name', default='cityscapes', type=str)
     # parser.add_argument('--config', dest='config', help='which file to restore', default='configs/baselines/e2e_pspnet-101_2x.yaml', type=str)
     parser.add_argument('--config', dest='config', help='which file to restore', default='./configs/baselines/e2e_ubernet-101_2x.yaml', type=str)
-    parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/pred_sem_val_500_ubernet50_plateau/', type=str)
+    parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/debug_test', type=str)
     parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[6], type=list)
     parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[720,720], type=int)
     parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1440], type=int)
@@ -95,7 +95,6 @@ class TestNet(object):
         cfg.TRAIN.IMS_PER_BATCH = 1
         args.input_size=cfg.SEM.INPUT_SIZE
         args.aug_scale=cfg.TRAIN.SCALES
-        print ('test scale:',args.aug_scale)
         self._cur = 0
         if args.network == 'Generalized_SEGDISP':
             self.load_image = self.load_segdisp_image
@@ -113,7 +112,7 @@ class TestNet(object):
             self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/val.txt')
             # self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/label_info_fine/test.txt')
             #self.label_root = os.path.join(os.getcwd(),'citycapes/label_info/onlytrain_label_citycapes_right.txt')
-            self.num_class = 19
+            self.num_class = 1
             self.image_shape=[1024, 2048]
         self.load_listname(args)
         self.pretrained_model=args.premodel
@@ -199,8 +198,7 @@ class TestNet(object):
     def save_pred(self, pred_list, image_name, scale_info, index, args): #拼起来
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
         assert np.all(list(pred_list[0].shape[2:]) == args.input_size), 'pred size is not same to input size'
-        assert np.all(pred_list[0] >=0), 'pred must be output of softmax'
-        assert pred_list[0].shape[0] == 1, 'per gpu only has one sample'
+        #assert np.all(pred_list[0] >=0), 'pred must be output of softmax'
         step_h, step_w = index
         scale, scale_i = scale_info
         for ih in range(step_h):
@@ -215,7 +213,7 @@ class TestNet(object):
                 pred_prob = np.concatenate((pred_prob, pred_w), axis=2)
         max_h = scale // 2
         max_w = scale
-        pred_prob = pred_prob[:, :, 0: max_h, 0: max_w] ## c,h,w
+        pred_prob = pred_prob[:, 0: max_h, 0: max_w] ## c,h,w
         write( tmp_name+'_'+str(scale_i)+'_prob.pkl', pred_prob)
 
     def save_multi_results(self, image_name, args): #多尺寸
@@ -224,7 +222,7 @@ class TestNet(object):
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
         for i, scale in enumerate(self.aug_scale):
             scale_pred = load(tmp_name+'_'+str(i)+'_prob.pkl')#(1, 19, 90, 180)
-            #pred_prob += self.up_sample(torch.from_numpy(scale_pred))[0].numpy()
+            # pred_prob += self.up_sample(torch.from_numpy(scale_pred))[0].numpy()
             if image_name.endswith('_disp'):
                 pred_disp = cv2.resize(scale_pred[0][0], tuple(self.image_shape[::-1]), interpolation=cv2.INTER_LINEAR)
                 cv2.imwrite(os.path.join(args.save_file,image_name.replace('.png','')) + '.png', pred_disp)
@@ -285,21 +283,20 @@ def to_test_segdisp(args):
 def to_test_semseg(args):
     test_net = TestNet(args)
     test_net.load_net(args)
+    pred_dict={}
     for i in range(args.index_start, args.index_end):
+        print(i)
         time_now = time.time()
         image, image_name = test_net.load_image(args)
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
-            args.input_size= [scale//2, scale]
-            cfg.SEM.INPUT_SIZE=args.input_size
-            #cfg_from_file(args.config)
             pred_list = [] ##预测的数据
             #pred_deepsup_list = []
             one_list, image_name, index = test_net.transfer_img(image, image_name, scale, args)
             for isave, im in enumerate(one_list): #剪成c多张图片 一张一张喂进去
                 input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
                 #input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False)
-                pred_dict = test_net.net(input_data)
-                
+                #pred_dict = test_net.net(input_data)
+                pred_dict[args.prefix_semseg] = input_data
                 pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
                 #pred_list.append((pred_dict[args.prefix_semseg]).detach().numpy())
                 #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())

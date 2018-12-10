@@ -6,6 +6,7 @@ data/*
 *.sh
 *~
 *chenlong2@*
+nohup.out
 /pretrained
 pretrain_model
 /output
