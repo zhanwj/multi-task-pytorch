@@ -3,6 +3,7 @@ data/*
 *.zip
 *.pyc
 *.tar
+*.sh
 *~
 *chenlong2@*
 /pretrained
