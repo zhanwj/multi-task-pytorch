@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn.init import kaiming_normal_,constant_
 from modeling.pytorch_spn.modules.gaterecurrent2dnoind import GateRecurrent2dnoind
+from lib.nn import SynchronizedBatchNorm2d
 
 class SPN(nn.Module):
 	"""docstring for SPN"""
@@ -15,14 +16,18 @@ class SPN(nn.Module):
 		self.bottom_to_up =GateRecurrent2dnoind(False,True)
 		self.up_to_bottom =GateRecurrent2dnoind(False,False)
 
-		self.guide_conv1=nn.Conv2d(cfg.MODEL.NUM_CLASSES,32,kernel_size=1,padding=0,stride=1,bias=False)
-		self.guide_conv2=nn.Conv2d(256,384,kernel_size=3,padding=1,stride=1,bias=False)
+		self.guide_conv1=nn.Sequential(
+                nn.Conv2d(cfg.MODEL.NUM_CLASSES, cfg.SEM.SPN_DIM, kernel_size=4,padding=1,stride=2,bias=False),
+                SynchronizedBatchNorm2d(cfg.SEM.SPN_DIM))
+		self.guide_conv2=nn.Sequential(
+                nn.Conv2d(2048,cfg.SEM.SPN_DIM*12,kernel_size=3,padding=1,stride=1,bias=False),
+                SynchronizedBatchNorm2d(cfg.SEM.SPN_DIM*12))
 
 		self.elt_resize_deconv=nn.Sequential(                      #1/2
-		    #nn.ConvTranspose2d(32,32,kernel_size=4,stride=2,padding=1,bias=False),
-		    nn.Conv2d(32,64,3,padding=1,stride=1,bias=False),
+		    nn.Conv2d(cfg.SEM.SPN_DIM,cfg.SEM.SPN_DIM*2,3,padding=1,stride=1,bias=False),
+            SynchronizedBatchNorm2d(cfg.SEM.SPN_DIM*2),
 		    nn.ReLU(inplace=True),
-		    nn.Conv2d(64,cfg.MODEL.NUM_CLASSES,kernel_size=3,padding=1,stride=1,bias=False)
+		    nn.Conv2d(cfg.SEM.SPN_DIM*2,cfg.MODEL.NUM_CLASSES,kernel_size=1,padding=0,stride=1,bias=False)
 		    )
 
 		for m in self.modules():
@@ -47,16 +52,14 @@ class SPN(nn.Module):
 		return return_list
 
 	def forward(self,featureMap,guidance):
-		
 		featureMap=self.guide_conv1(featureMap)
 		guidance=self.guide_conv2(guidance)
 		gate=[]
-		gate=torch.split(guidance,split_size_or_sections=32,dim=1)
+		gate=torch.split(guidance,split_size_or_sections=cfg.SEM.SPN_DIM,dim=1)
 		
 		G_left_to_right=gate[:self.connection_ways]
 		G_right_to_left=gate[self.connection_ways:2*self.connection_ways]
 		G_bottom_to_up=gate[2*self.connection_ways:4*self.connection_ways]
-		G_up_to_bottom=gate[-self.connection_ways:]
 		G_up_to_bottom=gate[-self.connection_ways:]
 		G_left_to_right=self._gNorm(G_left_to_right)
 		G_right_to_left=self._gNorm(G_right_to_left)

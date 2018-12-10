@@ -121,10 +121,16 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 p.requires_grad = False
 
     def loss_norm(self, pred_semseg, semseg_label):
+        if pred_semseg.shape[-1] != semseg_label.shape[-1]:
+            pred_semseg=nn.functional.interpolate(pred_semseg,size=semseg_label.shape[1:],mode='bilinear',align_corners=False)
         pred_semseg = F.log_softmax(pred_semseg, dim=1)
-        return self.crit(pred_semseg, semseg_label)
+        loss = self.crit(pred_semseg, semseg_label)
+        acc = self.pixel_acc(pred_semseg, semseg_label)
+        return loss, acc
 
     def loss_ohem(self, pred_semseg, semseg_label):
+        if pred_semseg.shape[-1] != semseg_label.shape[-1]:
+            pred_semseg=nn.functional.interpolate(pred_semseg,size=semseg_label.shape[1:],mode='bilinear',align_corners=False)
         b, c, h, w = pred_semseg.shape
         scan = torch.arange(cfg.MODEL.NUM_CLASSES).view(1, cfg.MODEL.NUM_CLASSES, 1, 1).cuda()
         scan_pos = scan.repeat(b,1,1,1)
@@ -143,45 +149,39 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         if self.training: # training
             return_dict['losses'] = {}
             return_dict['metrics'] = {}
-            if cfg.SEM.DECODER_TYPE.endswith('deepsup'): # use deep supervision technique
-                (pred, pred_deepsup) = self.decoder(self.encoder(data, return_feature_maps=True))
+            if cfg.SEM.DECODER_TYPE.endswith('deepsup') or cfg.SEM.DECODER_TYPE.startswith('spn'): # use deep supervision technique
+                (pred_semseg, pred_deepsup) = self.decoder(self.encoder(data, return_feature_maps=True))
+                if not isinstance(pred_deepsup, list):
+                    pred_deepsup = [pred_deepsup]
             else:
-                pred = self.decoder(self.encoder(data, return_feature_maps=True))
-            if cfg.SEM.DECODER_TYPE.endswith('deepsup') and not isinstance(pred_deepsup, list):
-                pred_deepsup = [pred_deepsup]
-            pred_semseg=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
-            loss = self.loss_semseg(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
+                pred_semseg = self.decoder(self.encoder(data, return_feature_maps=True))
+            loss, acc = self.loss_semseg(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
             return_dict['losses']['loss_semseg'] = loss
-            acc = self.pixel_acc(pred_semseg, feed_dict[cfg.SEM.OUTPUT_PREFIX+'_0'])
             return_dict['metrics']['accuracy_pixel'] = acc
-            if cfg.SEM.DECODER_TYPE.endswith('deepsup'):
-                for i in range(1, len(cfg.SEM.DOWNSAMPLE)):
-                    loss_deepsup = self.loss_semseg(pred_deepsup[i-1], 
-                        feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, i)])
-                    loss = loss + loss_deepsup * self.deep_sup_scale[i]
+            if cfg.SEM.DECODER_TYPE.endswith('deepsup') or cfg.SEM.DECODER_TYPE.startswith('spn'):
+                assert len(cfg.SEM.DEEP_SUB_SCALE)>1, 'per weight in each output side need to give'
+                for i in range(1, len(cfg.SEM.DEEP_SUB_SCALE)):
+                    loss_deepsup, _ = self.loss_semseg(pred_deepsup[i-1], 
+                        feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, 0)])
+                    loss = loss + loss_deepsup * cfg.SEM.DEEP_SUB_SCALE[i]
             # pytorch0.4 bug on gathering scalar(0-dim) tensors
             for k, v in return_dict['losses'].items():
                 return_dict['losses'][k] = v.unsqueeze(0)
             for k, v in return_dict['metrics'].items():
                 return_dict['metrics'][k] = v.unsqueeze(0)
         else: # inference
-            if cfg.SEM.DECODER_TYPE.endswith('deepsup'): # use deep supervision technique
+            if cfg.SEM.DECODER_TYPE.endswith('deepsup') or cfg.SEM.DECODER_TYPE.startswith('spn'): # use deep supervision technique
                 (pred, pred_deepsup) = self.decoder(self.encoder(data, return_feature_maps=True))
-                pred=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
-                pred_deepsup=nn.functional.interpolate(pred_deepsup,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
-                pred = F.softmax(pred, dim=1)
-                pred_deepsup = F.softmax(pred_deepsup, dim=1)
+                assert pred.shape[-1]!=cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
                 return_dict['pred_semseg']=pred
                 return_dict['pred_deepsup']=pred_deepsup
             else:
+                assert pred.shape[-1]!=cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
                 pred = self.decoder(self.encoder(data, return_feature_maps=True))
-                pred=nn.functional.interpolate(pred,size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
-                pred = F.softmax(pred, dim=1)
                 return_dict['pred_semseg']=pred
-        return return_dict
-
 
         return return_dict
+
 
 
     @check_inference

@@ -336,7 +336,7 @@ def main():
         optimizer = torch.optim.SGD(params, momentum=cfg.SOLVER.MOMENTUM)
     if cfg.SOLVER.TYPE == 'SGD' and cfg.SOLVER.LR_POLICY == 'ReduceLROnPlateau':
         optimizer = torch.optim.SGD(params, momentum=cfg.SOLVER.MOMENTUM)
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min',patience=5)
+        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,'min',patience=10)
         print("Using ReduceLROnPlateau as Lr reduce policy!")
     elif cfg.SOLVER.TYPE == "Adam":
         optimizer = torch.optim.Adam(params)

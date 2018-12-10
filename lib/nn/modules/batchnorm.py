@@ -3,7 +3,7 @@
 # Author : Jiayuan Mao
 # Email  : maojiayuan@gmail.com
 # Date   : 27/01/2018
-#
+# 
 # This file is part of Synchronized-BatchNorm-PyTorch.
 # https://github.com/vacancy/Synchronized-BatchNorm-PyTorch
 # Distributed under MIT License.
@@ -36,14 +36,22 @@ _MasterMessage = collections.namedtuple('_MasterMessage', ['sum', 'inv_std'])
 
 
 class _SynchronizedBatchNorm(_BatchNorm):
-    def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True):
+    def __init__(self, num_features, eps=1e-5, momentum=0.001, affine=True):
         super(_SynchronizedBatchNorm, self).__init__(num_features, eps=eps, momentum=momentum, affine=affine)
 
         self._sync_master = SyncMaster(self._data_parallel_master)
 
-        self._is_parallel = False
+        self._is_parallel = self.training and False
         self._parallel_id = None
         self._slave_pipe = None
+
+        # customed batch norm statistics
+        self._moving_average_fraction = 1. - momentum
+        self.register_buffer('_tmp_running_mean', torch.zeros(self.num_features))
+        self.register_buffer('_tmp_running_var', torch.ones(self.num_features))
+        self.register_buffer('_running_iter', torch.ones(1))
+        self._tmp_running_mean = self.running_mean.clone() * self._running_iter
+        self._tmp_running_var = self.running_var.clone() * self._running_iter
 
     def forward(self, input):
         # If it is not parallel computation or is in evaluation mode, use PyTorch's implementation.
@@ -89,9 +97,6 @@ class _SynchronizedBatchNorm(_BatchNorm):
 
     def _data_parallel_master(self, intermediates):
         """Reduce the sum and square-sum, compute the statistics, and broadcast it."""
-
-        # Always using same "device order" makes the ReduceAdd operation faster.
-        # Thanks to:: Tete Xiao (http://tetexiao.com/)
         intermediates = sorted(intermediates, key=lambda i: i[1].sum.get_device())
 
         to_reduce = [i[1][:2] for i in intermediates]
@@ -100,15 +105,20 @@ class _SynchronizedBatchNorm(_BatchNorm):
 
         sum_size = sum([i[1].sum_size for i in intermediates])
         sum_, ssum = ReduceAddCoalesced.apply(target_gpus[0], 2, *to_reduce)
+
         mean, inv_std = self._compute_mean_std(sum_, ssum, sum_size)
 
         broadcasted = Broadcast.apply(target_gpus, mean, inv_std)
 
         outputs = []
         for i, rec in enumerate(intermediates):
-            outputs.append((rec[0], _MasterMessage(*broadcasted[i * 2:i * 2 + 2])))
+            outputs.append((rec[0], _MasterMessage(*broadcasted[i*2:i*2+2])))
 
         return outputs
+
+    def _add_weighted(self, dest, delta, alpha=1, beta=1, bias=0):
+        """return *dest* by `dest := dest*alpha + delta*beta + bias`"""
+        return dest * alpha + delta * beta + bias
 
     def _compute_mean_std(self, sum_, ssum, size):
         """Compute the mean and standard-deviation with sum and square-sum. This method
@@ -119,8 +129,12 @@ class _SynchronizedBatchNorm(_BatchNorm):
         unbias_var = sumvar / (size - 1)
         bias_var = sumvar / size
 
-        self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.data
-        self.running_var = (1 - self.momentum) * self.running_var + self.momentum * unbias_var.data
+        self._tmp_running_mean = self._add_weighted(self._tmp_running_mean, mean.data, alpha=self._moving_average_fraction)
+        self._tmp_running_var = self._add_weighted(self._tmp_running_var, unbias_var.data, alpha=self._moving_average_fraction)
+        self._running_iter = self._add_weighted(self._running_iter, 1, alpha=self._moving_average_fraction)
+
+        self.running_mean = self._tmp_running_mean / self._running_iter
+        self.running_var = self._tmp_running_var / self._running_iter
 
         return mean, bias_var.clamp(self.eps) ** -0.5
 
@@ -128,27 +142,36 @@ class _SynchronizedBatchNorm(_BatchNorm):
 class SynchronizedBatchNorm1d(_SynchronizedBatchNorm):
     r"""Applies Synchronized Batch Normalization over a 2d or 3d input that is seen as a
     mini-batch.
+
     .. math::
+
         y = \frac{x - mean[x]}{ \sqrt{Var[x] + \epsilon}} * gamma + beta
+
     This module differs from the built-in PyTorch BatchNorm1d as the mean and
     standard-deviation are reduced across all devices during training.
+
     For example, when one uses `nn.DataParallel` to wrap the network during
     training, PyTorch's implementation normalize the tensor on each device using
     the statistics only on that device, which accelerated the computation and
     is also easy to implement, but the statistics might be inaccurate.
     Instead, in this synchronized version, the statistics will be computed
     over all training samples distributed on multiple devices.
-
+    
     Note that, for one-GPU or CPU-only case, this module behaves exactly same
     as the built-in PyTorch implementation.
+
     The mean and standard-deviation are calculated per-dimension over
     the mini-batches and gamma and beta are learnable parameter vectors
     of size C (where C is the input size).
+
     During training, this layer keeps a running estimate of its computed mean
     and variance. The running sum is kept with a default momentum of 0.1.
+
     During evaluation, this running mean/variance is used for normalization.
+
     Because the BatchNorm is done over the `C` dimension, computing statistics
     on `(N, L)` slices, it's common terminology to call this Temporal BatchNorm
+
     Args:
         num_features: num_features from an expected input of size
             `batch_size x num_features [x width]`
@@ -158,9 +181,11 @@ class SynchronizedBatchNorm1d(_SynchronizedBatchNorm):
             computation. Default: 0.1
         affine: a boolean value that when set to ``True``, gives the layer learnable
             affine parameters. Default: ``True``
+
     Shape:
         - Input: :math:`(N, C)` or :math:`(N, C, L)`
         - Output: :math:`(N, C)` or :math:`(N, C, L)` (same shape as input)
+
     Examples:
         >>> # With Learnable Parameters
         >>> m = SynchronizedBatchNorm1d(100)
@@ -180,27 +205,36 @@ class SynchronizedBatchNorm1d(_SynchronizedBatchNorm):
 class SynchronizedBatchNorm2d(_SynchronizedBatchNorm):
     r"""Applies Batch Normalization over a 4d input that is seen as a mini-batch
     of 3d inputs
+
     .. math::
+
         y = \frac{x - mean[x]}{ \sqrt{Var[x] + \epsilon}} * gamma + beta
+
     This module differs from the built-in PyTorch BatchNorm2d as the mean and
     standard-deviation are reduced across all devices during training.
+
     For example, when one uses `nn.DataParallel` to wrap the network during
     training, PyTorch's implementation normalize the tensor on each device using
     the statistics only on that device, which accelerated the computation and
     is also easy to implement, but the statistics might be inaccurate.
     Instead, in this synchronized version, the statistics will be computed
     over all training samples distributed on multiple devices.
-
+    
     Note that, for one-GPU or CPU-only case, this module behaves exactly same
     as the built-in PyTorch implementation.
+
     The mean and standard-deviation are calculated per-dimension over
     the mini-batches and gamma and beta are learnable parameter vectors
     of size C (where C is the input size).
+
     During training, this layer keeps a running estimate of its computed mean
     and variance. The running sum is kept with a default momentum of 0.1.
+
     During evaluation, this running mean/variance is used for normalization.
+
     Because the BatchNorm is done over the `C` dimension, computing statistics
     on `(N, H, W)` slices, it's common terminology to call this Spatial BatchNorm
+
     Args:
         num_features: num_features from an expected input of
             size batch_size x num_features x height x width
@@ -210,9 +244,11 @@ class SynchronizedBatchNorm2d(_SynchronizedBatchNorm):
             computation. Default: 0.1
         affine: a boolean value that when set to ``True``, gives the layer learnable
             affine parameters. Default: ``True``
+
     Shape:
         - Input: :math:`(N, C, H, W)`
         - Output: :math:`(N, C, H, W)` (same shape as input)
+
     Examples:
         >>> # With Learnable Parameters
         >>> m = SynchronizedBatchNorm2d(100)
@@ -232,28 +268,37 @@ class SynchronizedBatchNorm2d(_SynchronizedBatchNorm):
 class SynchronizedBatchNorm3d(_SynchronizedBatchNorm):
     r"""Applies Batch Normalization over a 5d input that is seen as a mini-batch
     of 4d inputs
+
     .. math::
+
         y = \frac{x - mean[x]}{ \sqrt{Var[x] + \epsilon}} * gamma + beta
+
     This module differs from the built-in PyTorch BatchNorm3d as the mean and
     standard-deviation are reduced across all devices during training.
+
     For example, when one uses `nn.DataParallel` to wrap the network during
     training, PyTorch's implementation normalize the tensor on each device using
     the statistics only on that device, which accelerated the computation and
     is also easy to implement, but the statistics might be inaccurate.
     Instead, in this synchronized version, the statistics will be computed
     over all training samples distributed on multiple devices.
-
+    
     Note that, for one-GPU or CPU-only case, this module behaves exactly same
     as the built-in PyTorch implementation.
+
     The mean and standard-deviation are calculated per-dimension over
     the mini-batches and gamma and beta are learnable parameter vectors
     of size C (where C is the input size).
+
     During training, this layer keeps a running estimate of its computed mean
     and variance. The running sum is kept with a default momentum of 0.1.
+
     During evaluation, this running mean/variance is used for normalization.
+
     Because the BatchNorm is done over the `C` dimension, computing statistics
     on `(N, D, H, W)` slices, it's common terminology to call this Volumetric BatchNorm
     or Spatio-temporal BatchNorm
+
     Args:
         num_features: num_features from an expected input of
             size batch_size x num_features x depth x height x width
@@ -263,9 +308,11 @@ class SynchronizedBatchNorm3d(_SynchronizedBatchNorm):
             computation. Default: 0.1
         affine: a boolean value that when set to ``True``, gives the layer learnable
             affine parameters. Default: ``True``
+
     Shape:
         - Input: :math:`(N, C, D, H, W)`
         - Output: :math:`(N, C, D, H, W)` (same shape as input)
+
     Examples:
         >>> # With Learnable Parameters
         >>> m = SynchronizedBatchNorm3d(100)

@@ -72,13 +72,13 @@ def argument():
     parser.add_argument('--dataset', dest='dataset', help='give a dataset name', default='cityscapes', type=str)
     # parser.add_argument('--config', dest='config', help='which file to restore', default='configs/baselines/e2e_pspnet-101_2x.yaml', type=str)
     parser.add_argument('--config', dest='config', help='which file to restore', default='./configs/baselines/e2e_ubernet-101_2x.yaml', type=str)
-    parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/pred_segdisp_val_500_ubernet50_step/', type=str)
-    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[1], type=list)
-    parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[512,1024], type=int)
+    parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/pred_sem_val_500_ubernet50_plateau/', type=str)
+    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[6], type=list)
+    parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[720,720], type=int)
     parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1440], type=int)
     parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
     # parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
-    parser.add_argument('--pretrained_model', dest='premodel', help='path to pretrained model', default='./output/e2e_ubernet-res50_2x/Dec05-11-05-31_GPU-cluster-2/ckpt/model_35_1486.pth', type=str)
+    parser.add_argument('--pretrained_model', dest='premodel', help='path to pretrained model', default='./output/ubernet50_multiscale_ReduceLROnPlateau_40epochs_720/e2e_ubernet-101_2x/Dec07-10-56-09_localhost.localdomain/ckpt//model_59_1486.pth', type=str)
     parser.add_argument('--prefix_semseg', dest='prefix_semseg', help='output name of network', default='pred_semseg', type=str)
     parser.add_argument('--prefix_disp', dest='prefix_disp', help='output name of network', default='pred_disp', type=str)
     parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_deepsup', type=str)
@@ -93,6 +93,8 @@ class TestNet(object):
         # assert False, 'merge config'
         cfg_from_file(args.config)
         cfg.TRAIN.IMS_PER_BATCH = 1
+        args.input_size=cfg.SEM.INPUT_SIZE
+        args.aug_scale=cfg.TRAIN.SCALES
         self._cur = 0
         if args.network == 'Generalized_SEGDISP':
             self.load_image = self.load_segdisp_image

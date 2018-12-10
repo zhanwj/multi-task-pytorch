@@ -78,11 +78,7 @@ def _sample_rois(roidb, im_scale, batch_idx, interp):
                 input_label[np.newaxis, :, :]
         return blob_dict 
     # Add label to other loss
-    downsample = cfg.SEM.DOWNSAMPLE
-    for ids, stride in enumerate(downsample):
-        step = 2**stride
-        blob_dict['{}_{}'.format(prefix, ids)] = \
-            input_label[np.newaxis,::step, ::step].copy()
+    blob_dict['{}_{}'.format(prefix, 0)] = input_label[np.newaxis].copy()
 
     return blob_dict
 

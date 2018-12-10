@@ -13,11 +13,13 @@ def get_minibatch_blob_names(is_training=True):
     # data blob: holds a batch of N images, each with 3 channels
     blob_names = ['data']
     if cfg.SEM.SEM_ON and is_training:
-        for idx in range(len(cfg.SEM.DOWNSAMPLE)):
+        #for idx in range(len(cfg.SEM.DOWNSAMPLE)):
+        for idx in range(1):
             blob_names += ['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, idx)]
     if cfg.DISP.DISP_ON and is_training:
         blob_names += ['data_R']
-        for idx in range(len(cfg.DISP.DOWNSAMPLE)):
+        #for idx in range(len(cfg.DISP.DOWNSAMPLE)):
+        for idx in range(1):
             blob_names += ['{}_{}'.format(cfg.DISP.OUTPUT_PREFIX, idx)]
     if not cfg.SEM.UNION:
         return blob_names
