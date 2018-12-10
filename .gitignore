@@ -1,6 +1,10 @@
 data/*
+*.tar.gz
+*.zip
 *.pyc
+*.tar
 *~
+*chenlong2@*
 /pretrained
 pretrain_model
 /output

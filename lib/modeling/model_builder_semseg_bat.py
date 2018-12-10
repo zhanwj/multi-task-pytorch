@@ -172,11 +172,11 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         else: # inference
             if cfg.SEM.DECODER_TYPE.endswith('deepsup') or cfg.SEM.DECODER_TYPE.startswith('spn'): # use deep supervision technique
                 (pred, pred_deepsup) = self.decoder(self.encoder(data, return_feature_maps=True))
-                assert pred.shape[-1]!=cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
+                assert pred.shape[-1]==cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
                 return_dict['pred_semseg']=pred
                 return_dict['pred_deepsup']=pred_deepsup
             else:
-                assert pred.shape[-1]!=cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
+                assert pred.shape[-1]==cfg.SEM.INPUT_SIZE[-1], 'need to output full size in semseg_heads'
                 pred = self.decoder(self.encoder(data, return_feature_maps=True))
                 return_dict['pred_semseg']=pred
 
