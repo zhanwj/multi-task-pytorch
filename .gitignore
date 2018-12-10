@@ -9,7 +9,6 @@ data/*
 pretrain_model
 /output
 /trainLog
-*.sh
 *.o
 *.so
 *.log
@@ -24,7 +23,6 @@ pretrain_model
 *.cu
 *.c
 *.json
-*.sh
 /lib/datasets/data/*
 updategit.sh
 multi-task-pytorch
