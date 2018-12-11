@@ -1,4 +1,4 @@
-print("spn not implement!!!!! please uncomment!!")
+print("spn not implement!!!!!! please uncomment!!")
 """
 from core.config import  cfg
 import torch
