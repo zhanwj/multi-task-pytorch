@@ -1,3 +1,5 @@
+print("spn not implement!!!!! please uncomment!!")
+"""
 from core.config import  cfg
 import torch
 import torch.nn as nn
@@ -7,7 +9,7 @@ from modeling.pytorch_spn.modules.gaterecurrent2dnoind import GateRecurrent2dnoi
 from lib.nn import SynchronizedBatchNorm2d
 
 class SPN(nn.Module):
-	"""docstring for SPN"""
+	#docstring for SPN
 	def __init__(self):
 		super(SPN, self).__init__()
 		self.connection_ways=cfg.SEM.SPN_CONNECTION_WAYS
@@ -83,7 +85,7 @@ class SPN(nn.Module):
 		#return output_max
 		predict1x=self.elt_resize_deconv(output_max)
 		return predict1x
-
+"""
 
 
 	

@@ -5,7 +5,7 @@ MODEL:
   FASTER_RCNN: False
   NUM_CLASSES: 19
 RESNETS:
-    IMAGENET_PRETRAINED_WEIGHTS: 'lib/datasets/pretrain_model/se_resnext101_32x4d-3b2fe3d8.pth'
+    IMAGENET_PRETRAINED_WEIGHTS: 'lib/datasets/pretrain_model/se_resnet101-7e38fcc6.pth'
 SEM:
     SEM_ON: True
     UNION: False
@@ -13,8 +13,8 @@ SEM:
     DIM: 512
     INPUT_SIZE: [688, 688]
     TRAINSET: 'train'
-    ARCH_ENCODER: 'se_resnext101_dilate8_32x4d'
-    DECODER_TYPE: 'ppm_bilinear_deepsup'
+    ARCH_ENCODER: 'se_resnext101_dilate16_32x4d'
+    DECODER_TYPE: 'upernet'
     DEEP_SUB_SCALE: [1.0, 0.4]
     DOWNSAMPLE: [0, 3]
     OUTPUT_PREFIX: 'semseg_label'
@@ -48,7 +48,7 @@ TRAIN:
 TEST:
   SCALE: 800
   MAX_SIZE: 1333
-  NMS: 0.0
+  NMS: 0.5
   RPN_PRE_NMS_TOP_N: 1000  # Per FPN level
   RPN_POST_NMS_TOP_N: 1000
-OUTPUT_DIR: ./output/PSP_SE-X101_noMultiScale_ReduceLROnPlateau_60epochs_688
+OUTPUT_DIR: ./output/Ubernet_SE-X101_noMultiScale_ReduceLROnPlateau_60epochs_672
