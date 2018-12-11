@@ -11,13 +11,14 @@ except ImportError:
     from urllib.request import urlretrieve
 
 
-__all__ = ['ResNet', 'resnet18', 'resnet50', 'resnet101'] # resnet101 is coming soon!
+__all__ = ['ResNet', 'resnet18', 'resnet50', 'resnet101','resnet152'] # resnet101 is coming soon!
 
 
 model_urls = {
     'resnet18': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet18-imagenet.pth',
     'resnet50': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet50-imagenet.pth',
-    'resnet101': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet101-imagenet.pth'
+    'resnet101': 'http://sceneparsing.csail.mit.edu/model/pretrained_resnet/resnet101-imagenet.pth',
+    'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
 }
 
 
@@ -210,16 +211,16 @@ def resnet101(pretrained=False, **kwargs):
         model.load_state_dict(load_url(model_urls['resnet101']), strict=False)
     return model
 
-# def resnet152(pretrained=False, **kwargs):
-#     """Constructs a ResNet-152 model.
-#
-#     Args:
-#         pretrained (bool): If True, returns a model pre-trained on Places
-#     """
-#     model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
-#     if pretrained:
-#         model.load_state_dict(load_url(model_urls['resnet152']))
-#     return model
+ def resnet152(pretrained=False, **kwargs):
+     """Constructs a ResNet-152 model.
+
+     Args:
+         pretrained (bool): If True, returns a model pre-trained on Places
+     """
+     model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
+     if pretrained:
+         model.load_state_dict(load_url(model_urls['resnet152']))
+     return model
 
 def load_url(url, model_dir='./pretrained', map_location=None):
     if not os.path.exists(model_dir):

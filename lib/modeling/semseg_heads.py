@@ -125,6 +125,19 @@ class ModelBuilder():
             orig_resnet = resnet.__dict__['resnet101'](pretrained=pretrained)
             net_encoder = ResnetDilated(orig_resnet,
                                         dilate_scale=16)
+        
+        elif arch == 'resnet152':
+            orig_resnet = resnet.__dict__['resnet152'](pretrained=pretrained)
+            net_encoder = Resnet(orig_resnet)
+        elif arch == 'resnet152_dilated8':
+            orig_resnet = resnet.__dict__['resnet152'](pretrained=pretrained)
+            net_encoder = ResnetDilated(orig_resnet,
+                                        dilate_scale=8)
+        elif arch == 'resnet152_dilated16':
+            orig_resnet = resnet.__dict__['resnet152'](pretrained=pretrained)
+            net_encoder = ResnetDilated(orig_resnet,
+                                        dilate_scale=16)
+        
         elif arch == 'resnext101':
             orig_resnext = resnext.__dict__['resnext101'](pretrained=pretrained)
             net_encoder = Resnet(orig_resnext) # we can still use class Resnet
