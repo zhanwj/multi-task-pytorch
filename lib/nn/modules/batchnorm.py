@@ -7,7 +7,6 @@
 # This file is part of Synchronized-BatchNorm-PyTorch.
 # https://github.com/vacancy/Synchronized-BatchNorm-PyTorch
 # Distributed under MIT License.
-print("h")
 import collections
 
 import torch
