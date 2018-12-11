@@ -86,6 +86,19 @@ class SPN(nn.Module):
 		predict1x=self.elt_resize_deconv(output_max)
 		return predict1x
 """
+class SPN(nn.Module):
+	#docstring for SPN
+	def __init__(self):
+		super(SPN, self).__init__()
+		self.guide_conv1=nn.Sequential(
+                nn.Conv2d(cfg.MODEL.NUM_CLASSES, cfg.SEM.SPN_DIM, kernel_size=4,padding=1,stride=2,bias=False),
+                SynchronizedBatchNorm2d(cfg.SEM.SPN_DIM))
+		self.guide_conv2=nn.Sequential(
+                nn.Conv2d(2048,cfg.SEM.SPN_DIM*12,kernel_size=3,padding=1,stride=1,bias=False),
+                SynchronizedBatchNorm2d(cfg.SEM.SPN_DIM*12))
 
+
+	def forward(self,featureMap,guidance):
+		return featureMap
 
 	
