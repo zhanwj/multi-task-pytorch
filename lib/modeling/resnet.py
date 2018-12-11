@@ -211,16 +211,16 @@ def resnet101(pretrained=False, **kwargs):
         model.load_state_dict(load_url(model_urls['resnet101']), strict=False)
     return model
 
- def resnet152(pretrained=False, **kwargs):
-     """Constructs a ResNet-152 model.
-
-     Args:
-         pretrained (bool): If True, returns a model pre-trained on Places
-     """
-     model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
-     if pretrained:
-         model.load_state_dict(load_url(model_urls['resnet152']))
-     return model
+def resnet152(pretrained=False, **kwargs):
+    """Constructs a ResNet-152 model.
+    
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on Places
+    """
+    model = ResNet(Bottleneck, [3, 8, 36, 3], **kwargs)
+    if pretrained:
+        model.load_state_dict(load_url(model_urls['resnet152']))
+    return model
 
 def load_url(url, model_dir='./pretrained', map_location=None):
     if not os.path.exists(model_dir):
