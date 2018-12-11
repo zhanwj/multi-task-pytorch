@@ -11,7 +11,7 @@ SEM:
     UNION: False
     FC_DIM: 2048
     DIM: 512
-    INPUT_SIZE: [688, 688]
+    INPUT_SIZE: [720, 720]
     TRAINSET: 'train'
     ARCH_ENCODER: 'se_resnet101_dilate8'
     DECODER_TYPE: 'ppm_bilinear_deepsup'
