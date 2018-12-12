@@ -51,7 +51,6 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
 def group_weight(module):
     group_decay = []
     group_no_decay = []
-    free_bns = 0
     for m in module.modules():
         if isinstance(m, nn.Linear):
             group_decay.append(m.weight)
@@ -62,13 +61,12 @@ def group_weight(module):
             if m.bias is not None:
                 group_no_decay.append(m.bias)
         elif isinstance(m, nn.modules.batchnorm._BatchNorm):
-            free_bns += 2
             if m.weight is not None:
                 group_no_decay.append(m.weight)
             if m.bias is not None:
                 group_no_decay.append(m.bias)
 
-    assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)+free_bns
+    assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)
     groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0)]
     return groups
 

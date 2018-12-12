@@ -53,7 +53,11 @@ class ResNet_convX_body(nn.Module):
                                       dilation=1, stride_init=1)
         self.res3, dim_in = add_stage(dim_in, 512, dim_bottleneck * 2, block_counts[1],
                                       dilation=1, stride_init=2)
-        self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
+        if cfg.SEM.SEM_ON and cfg.SEM.ARCH_ENCODER.endswith('dilated8'):
+            self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
+                                      dilation=2, stride_init=1)
+        else:
+            self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
                                       dilation=1, stride_init=2)
         if len(block_counts) == 4:
             stride_init = 2 if cfg.RESNETS.RES5_DILATION == 1 else 1
@@ -109,10 +113,15 @@ class ResNet_convX_body(nn.Module):
         for i in range(cfg.RESNETS.FREEZE_AT + 1, self.convX + 1):
             getattr(self, 'res%d' % i).train(mode)
 
-    def forward(self, x):
+    def forward(self, x, return_feature_maps=True):
+        conv_out=[]
         for i in range(self.convX):
             x = getattr(self, 'res%d' % (i + 1))(x)
-        return x
+            conv_out.append(x)
+        if return_feature_maps:
+            return conv_out
+        else:
+            return x
 
 
 class ResNet_roi_conv5_head(nn.Module):

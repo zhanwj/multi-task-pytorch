@@ -461,8 +461,6 @@ class PPMBilinear(nn.Module):
             nn.Conv2d(512, num_class, kernel_size=1)
         )
 
-        if cfg.SEM.FREEZE_BN:
-            self.freeze_bn()
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
@@ -486,12 +484,6 @@ class PPMBilinear(nn.Module):
 
         return x
 
-    def freeze_bn(self):
-        for m in self.modules():
-            if isinstance(m, SynchronizedBatchNorm2d):
-                m.eval()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.eval()
 
 # pyramid pooling, bilinear upsample
 class PPMBilinearDeepsup(nn.Module):
@@ -522,15 +514,6 @@ class PPMBilinearDeepsup(nn.Module):
         self.conv_last_deepsup = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
         self.dropout_deepsup = nn.Dropout2d(0.1)
 
-        if cfg.SEM.FREEZE_BN:
-            self.freeze_bn()
-
-    def freeze_bn(self):
-        for m in self.modules():
-            if isinstance(m, SynchronizedBatchNorm2d):
-                m.eval()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.eval()
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
@@ -606,15 +589,6 @@ class UPerNet(nn.Module):
             conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
-        if cfg.SEM.FREEZE_BN:
-            self.freeze_bn()
-
-    def freeze_bn(self):
-        for m in self.modules():
-            if isinstance(m, SynchronizedBatchNorm2d):
-                m.eval()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.eval()
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
@@ -681,8 +655,6 @@ class Deeplab(nn.Module):
                                        nn.Conv2d(256, cfg.MODEL.NUM_CLASSES, kernel_size=1, stride=1))
         self._init_weight()
 
-        if cfg.SEM.FREEZE_BN:
-            self.freeze_bn()
 
     def forward(self, conv_out):
         low_level_feat = conv_out[1]
@@ -715,14 +687,6 @@ class Deeplab(nn.Module):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-    def freeze_bn(self):
-        for m in self.modules():
-            if isinstance(m, SynchronizedBatchNorm2d):
-                m.eval()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.eval()
-
-# upernet+cspn
 class CspnUPerNet(nn.Module):
     def __init__(self, num_class=150, fc_dim=4096,
                  use_softmax=False, pool_scales=(1, 2, 3, 6),
@@ -771,15 +735,7 @@ class CspnUPerNet(nn.Module):
             SynchronizedBatchNorm2d(8*cfg.MODEL.NUM_CLASSES),
         )
         self.cspn_net = Affinity_Propagate()
-        if cfg.SEM.FREEZE_BN:
-            self.freeze_bn
 
-    def freeze_bn(self):
-        for m in self.modules():
-            if isinstance(m, SynchronizedBatchNorm2d):
-                m.eval()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.eval()
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
@@ -876,15 +832,7 @@ class SpnUPerNet(nn.Module):
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
         self.spn_net = SPN()
-        if cfg.SEM.FREEZE_BN:
-            self.freeze_bn()
 
-    def freeze_bn(self):
-        for m in self.modules():
-            if isinstance(m, SynchronizedBatchNorm2d):
-                m.eval()
-            elif isinstance(m, nn.BatchNorm2d):
-                m.eval()
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
