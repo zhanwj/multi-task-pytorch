@@ -51,22 +51,34 @@ resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
 def group_weight(module):
     group_decay = []
     group_no_decay = []
+    keep_bn = 0
     for m in module.modules():
         if isinstance(m, nn.Linear):
             group_decay.append(m.weight)
             if m.bias is not None:
                 group_no_decay.append(m.bias)
+        elif isinstance(m, mynn.AffineChannel2d):
+            if m.weight is not None:
+                keep_bn += 1
+            if m.bias is not None:
+                keep_bn += 1
         elif isinstance(m, nn.modules.conv._ConvNd):
             group_decay.append(m.weight)
             if m.bias is not None:
                 group_no_decay.append(m.bias)
         elif isinstance(m, nn.modules.batchnorm._BatchNorm):
             if m.weight is not None:
-                group_no_decay.append(m.weight)
+                if not cfg.SEM.FREEZE_BN:
+                    keep_bn+=1
+                else:
+                    group_no_decay.append(m.weight)
             if m.bias is not None:
-                group_no_decay.append(m.bias)
+                if not cfg.SEM.FREEZE_BN:
+                    keep_bn+=1
+                else:
+                    group_no_decay.append(m.bias)
 
-    assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)
+    #assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)+keep_bn
     groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0)]
     return groups
 

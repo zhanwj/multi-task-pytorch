@@ -49,9 +49,7 @@ def load_pretrained_imagenet_weights(model):
 
     pattern = dwh.resnet_weights_name_pattern()
     
-    if cfg.SEM.SEM_ON or cfg.DISP.DISP_ON:
-        return
-    name_mapping, _ = model.detectron_weight_mapping
+    name_mapping, _ = model.detectron_weight_mapping()
     
     for k, v in name_mapping.items():
         if isinstance(v, str):  # maybe a str, None or True

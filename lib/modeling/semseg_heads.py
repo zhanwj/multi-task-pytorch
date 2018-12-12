@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision
+from core.config import cfg
 from . import resnet, resnext,senet
 import modeling.ResNet as ResNet
 from lib.nn import SynchronizedBatchNorm2d
@@ -9,7 +10,8 @@ from modeling.backbone import build_backbone
 from modeling.aspp import build_aspp
 from modeling.cspn import Affinity_Propagate
 from modeling.spn_bat import SPN
-from core.config import cfg
+import utils.resnet_weights_helper as resnet_utils
+import pickle
 BatchNorm = SynchronizedBatchNorm2d
 def get_func(func_name):
     """Helper to return a function object by name. func_name must identify a
@@ -96,8 +98,12 @@ class ModelBuilder():
             m.bias.data.fill_(1e-4)
         #elif classname.find('Linear') != -1:
         #    m.weight.data.normal_(0.0, 0.0001)
-
+        
     def build_encoder(self, arch='resnet50_dilated8', fc_dim=512, weights=''):
+        if cfg.SEM.FREEZE_BN:
+            from lib.nn import AffineChannel2d
+            global SynchronizedBatchNorm2d
+            SynchronizedBatchNorm2d = AffineChannel2d
         pretrained = True if len(weights) == 0 else False
         if arch == 'resnet18':
             orig_resnet = resnet.__dict__['resnet18'](pretrained=pretrained)
@@ -129,17 +135,39 @@ class ModelBuilder():
             net_encoder = Resnet(orig_resnet)
 
         elif arch == 'ResnetX_dilated8' or arch == 'ResnetX_dilated16':
+            #orig_resnet = ResNet.__dict__['resnet101'](pretrained=False)
             net_encoder = eval(cfg.MODEL.CONV_BODY)()
-            print ('loading pretrained model for ResNet')
-            pretrained=torch.load(cfg.RESNETS.IMAGENET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
-            #pretrained=pretrained['model']
-            net_encoder.load_state_dict(pretrained,strict=False)
-            print ('loading pretrained is done')
+            print ('loading weights for ResNet')
+            resnet_utils.load_pretrained_imagenet_weights(net_encoder)
+            print ('loading weights is done')
+            if cfg.TRAIN.FREEZE_CONV_BODY:
+                print ('freeze train conv_body')
+                for p in self.Conv_Body.parameters():
+                    p.requires_grad = False
+
+            #print ('loading pretrained model for ResNet')
+            #pretrained=torch.load(cfg.RESNETS.IMAGENET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
+            #with open(cfg.RESNETS.IMAGENET_PRETRAINED_WEIGHTS, 'rb') as f:
+            #    pretrained = pickle.load(f, encoding='latin1')
+            #print (pretrained['blobs'].keys())
+            #orig_resnet.load_state_dict(pretrained['model'],strict=True)
+            #print (pretrained.keys())
+            #net_encoder.load_state_dict(pretrained,strict=True)
+            #print ('loading pretrained is done')
+            #net_encoder = ResnetDilated(orig_resnet,dilate_scale=8)
+            #net_encoder = ResnetDilated(orig_resnet,dilate_scale=8)
+            ##pretrained=pretrained['model']
+           
+            #print ('loading pretrained is done')
+            #from  lib.nn import AffineChannel2d 
+            #global SynchronizedBatchNorm2d 
+            #SynchronizedBatchNorm2d = AffineChannel2d
 
         elif arch == 'resnet50_dilated8':
             orig_resnet = resnet.__dict__['resnet50'](pretrained=pretrained)
             net_encoder = ResnetDilated(orig_resnet,
                                         dilate_scale=8)
+
         elif arch == 'resnet50_dilated16':
             orig_resnet = resnet.__dict__['resnet50'](pretrained=pretrained)
             net_encoder = ResnetDilated(orig_resnet,
@@ -158,14 +186,14 @@ class ModelBuilder():
         
         elif arch == 'resnet152':
             orig_resnet = resnet.__dict__['resnet152'](pretrained=pretrained)
-            net_encoder = Resnet(orig_resnet)
+            net_encoder = Resnet152(orig_resnet)
         elif arch == 'resnet152_dilated8':
             orig_resnet = resnet.__dict__['resnet152'](pretrained=pretrained)
-            net_encoder = ResnetDilated(orig_resnet,
+            net_encoder = Resnet152Dilated(orig_resnet,
                                         dilate_scale=8)
         elif arch == 'resnet152_dilated16':
             orig_resnet = resnet.__dict__['resnet152'](pretrained=pretrained)
-            net_encoder = ResnetDilated(orig_resnet,
+            net_encoder = Resnet152Dilated(orig_resnet,
                                         dilate_scale=16)
         
         elif arch == 'resnext101':
@@ -372,6 +400,59 @@ class ResnetDilated(nn.Module):
             return conv_out
         return [x]
 
+class Resnet152Dilated(nn.Module):
+    def __init__(self, orig_resnet, dilate_scale=8):
+        super(Resnet152Dilated, self).__init__()
+        from functools import partial
+
+        if dilate_scale == 8:
+            orig_resnet.layer3.apply(
+                partial(self._nostride_dilate, dilate=2))
+            orig_resnet.layer4.apply(
+                partial(self._nostride_dilate, dilate=4))
+        elif dilate_scale == 16:
+            orig_resnet.layer4.apply(
+                partial(self._nostride_dilate, dilate=2))
+
+        # take pretrained resnet, except AvgPool and FC
+        self.conv1 = orig_resnet.conv1
+        self.bn1 = orig_resnet.bn1
+        self.relu = orig_resnet.relu
+        self.maxpool = orig_resnet.maxpool
+        self.layer1 = orig_resnet.layer1
+        self.layer2 = orig_resnet.layer2
+        self.layer3 = orig_resnet.layer3
+        self.layer4 = orig_resnet.layer4
+
+    def _nostride_dilate(self, m, dilate):
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            # the convolution with stride
+            if m.stride == (2, 2):
+                m.stride = (1, 1)
+                if m.kernel_size == (3, 3):
+                    m.dilation = (dilate//2, dilate//2)
+                    m.padding = (dilate//2, dilate//2)
+            # other convoluions
+            else:
+                if m.kernel_size == (3, 3):
+                    m.dilation = (dilate, dilate)
+                    m.padding = (dilate, dilate)
+
+    def forward(self, x, return_feature_maps=False):
+        conv_out = []
+
+        x = self.relu(self.bn1(self.conv1(x)))
+        x = self.maxpool(x)
+
+        x = self.layer1(x); conv_out.append(x);
+        x = self.layer2(x); conv_out.append(x);
+        x = self.layer3(x); conv_out.append(x);
+        x = self.layer4(x); conv_out.append(x);
+
+        if return_feature_maps:
+            return conv_out
+        return [x]
 
 # last conv, bilinear upsample
 class C1BilinearDeepSup(nn.Module):

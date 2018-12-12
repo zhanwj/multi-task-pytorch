@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+from lib.nn import SynchronizedBatchNorm2d
 from core.config import cfg
 from model.roi_pooling.functions.roi_pool import RoIPoolFunction
 #from model.roi_crop.functions.roi_crop import RoICropFunction
@@ -112,11 +113,25 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         else:
             self.loss_semseg = self.loss_ohem
 
+
+
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, SynchronizedBatchNorm2d):
+                print ('freeze_bn')
+                m.eval()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.eval()
+                print ('freeze_bn')
+
     def _init_modules(self):
         if cfg.MODEL.LOAD_IMAGENET_PRETRAINED_WEIGHTS:
+            print ('loading weights for ResNet')
             resnet_utils.load_pretrained_imagenet_weights(self)
+            print ('loading weights is done')
 
         if cfg.TRAIN.FREEZE_CONV_BODY:
+            print ('freeze train conv_body')
             for p in self.Conv_Body.parameters():
                 p.requires_grad = False
 
@@ -186,7 +201,24 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         blob_conv = self.Conv_Body(data)
         return blob_conv
 
+    @property
+    def detectron_weight_mapping(self):
+        if self.mapping_to_detectron is None:
+            d_wmap = {}  # detectron_weight_mapping
+            d_orphan = []  # detectron orphan weight list
+            for name, m_child in self.named_children():
+                if list(m_child.parameters()):  # if module has any parameter
+                    child_map, child_orphan = m_child.detectron_weight_mapping()
+                    d_orphan.extend(child_orphan)
+                    for key, value in child_map.items():
+                        new_key = name + '.' + key
+                        d_wmap[new_key] = value
+            self.mapping_to_detectron = d_wmap
+            self.orphans_in_detectron = d_orphan
+
+        return self.mapping_to_detectron, self.orphans_in_detectron
 
     def _add_loss(self, return_dict, key, value):
         """Add loss tensor to returned dictionary"""
         return_dict['losses'][key] = value
+

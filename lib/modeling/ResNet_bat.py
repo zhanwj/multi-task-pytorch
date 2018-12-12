@@ -71,6 +71,7 @@ class ResNet_convX_body(nn.Module):
 
         self._init_modules()
         
+        #self.detectron_weight_mapping()
 
 
     def _init_modules(self):

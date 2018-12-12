@@ -93,7 +93,6 @@ class TestNet(object):
         # assert False, 'merge config'
         cfg_from_file(args.config)
         cfg.TRAIN.IMS_PER_BATCH = 1
-        args.input_size=cfg.SEM.INPUT_SIZE
         args.aug_scale=cfg.TRAIN.SCALES
         print ('test scale:',args.aug_scale)
         self._cur = 0
