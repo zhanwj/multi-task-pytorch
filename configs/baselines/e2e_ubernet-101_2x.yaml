@@ -12,7 +12,7 @@ SEM:
     DIM: 512
     INPUT_SIZE: [720, 720]
     TRAINSET: 'train'
-    ARCH_ENCODER: 'resnet01_dilated16'
+    ARCH_ENCODER: 'resnet101_dilated16'
     DECODER_TYPE: 'upernet'
     DEEP_SUB_SCALE: [1.0]
     DOWNSAMPLE: [0]
