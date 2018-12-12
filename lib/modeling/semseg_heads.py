@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision
 from . import resnet, resnext,senet
+import modeling.ResNet as ResNet
 from lib.nn import SynchronizedBatchNorm2d
 import math
 from modeling.backbone import build_backbone
@@ -10,6 +11,26 @@ from modeling.cspn import Affinity_Propagate
 from modeling.spn_bat import SPN
 from core.config import cfg
 BatchNorm = SynchronizedBatchNorm2d
+def get_func(func_name):
+    """Helper to return a function object by name. func_name must identify a
+    function in this module or the path to a function relative to the base
+    'modeling' module.
+    """
+    if func_name == '':
+        return None
+    try:
+        parts = func_name.split('.')
+        # Refers to a function in this module
+        if len(parts) == 1:
+            return globals()[parts[0]]
+        # Otherwise, assume we're referencing a module under modeling
+        module_name = 'modeling.' + '.'.join(parts[:-1])
+        module = importlib.import_module(module_name)
+        return getattr(module, parts[-1])
+    except Exception:
+        logger.error('Failed to find function: %s', func_name)
+        raise
+
 class SegmentationModuleBase(nn.Module):
     def __init__(self):
         super(SegmentationModuleBase, self).__init__()
@@ -106,6 +127,15 @@ class ModelBuilder():
         elif arch == 'resnet50':
             orig_resnet = resnet.__dict__['resnet50'](pretrained=pretrained)
             net_encoder = Resnet(orig_resnet)
+
+        elif arch == 'ResnetX_dilated8' or arch == 'ResnetX_dilated16':
+            net_encoder = eval(cfg.MODEL.CONV_BODY)()
+            print ('loading pretrained model for ResNet')
+            pretrained=torch.load(cfg.RESNETS.IMAGENET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
+            #pretrained=pretrained['model']
+            net_encoder.load_state_dict(pretrained,strict=False)
+            print ('loading pretrained is done')
+
         elif arch == 'resnet50_dilated8':
             orig_resnet = resnet.__dict__['resnet50'](pretrained=pretrained)
             net_encoder = ResnetDilated(orig_resnet,
@@ -163,11 +193,6 @@ class ModelBuilder():
             net_encoder = senet.__dict__['se_resnext50_dilate_32x4d'](dilate=16,pretrained=pretrained)
         elif arch == 'se_resnext101_dilate16_32x4d':
             net_encoder = senet.__dict__['se_resnext101_dilate_32x4d'](dilate=16,pretrained=pretrained)
-
-
-
-
-
         elif arch == 'xception':
             net_encoder=build_backbone('xception', 16, BatchNorm)
         else:
@@ -436,6 +461,9 @@ class PPMBilinear(nn.Module):
             nn.Conv2d(512, num_class, kernel_size=1)
         )
 
+        if cfg.SEM.FREEZE_BN:
+            self.freeze_bn()
+
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
 
@@ -450,6 +478,7 @@ class PPMBilinear(nn.Module):
 
         x = self.conv_last(ppm_out)
 
+
         if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
                 x, size=segSize, mode='bilinear', align_corners=False)
@@ -457,6 +486,12 @@ class PPMBilinear(nn.Module):
 
         return x
 
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, SynchronizedBatchNorm2d):
+                m.eval()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.eval()
 
 # pyramid pooling, bilinear upsample
 class PPMBilinearDeepsup(nn.Module):
@@ -486,6 +521,16 @@ class PPMBilinearDeepsup(nn.Module):
         )
         self.conv_last_deepsup = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
         self.dropout_deepsup = nn.Dropout2d(0.1)
+
+        if cfg.SEM.FREEZE_BN:
+            self.freeze_bn()
+
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, SynchronizedBatchNorm2d):
+                m.eval()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.eval()
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
@@ -561,6 +606,15 @@ class UPerNet(nn.Module):
             conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
+        if cfg.SEM.FREEZE_BN:
+            self.freeze_bn()
+
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, SynchronizedBatchNorm2d):
+                m.eval()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.eval()
 
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
@@ -627,6 +681,8 @@ class Deeplab(nn.Module):
                                        nn.Conv2d(256, cfg.MODEL.NUM_CLASSES, kernel_size=1, stride=1))
         self._init_weight()
 
+        if cfg.SEM.FREEZE_BN:
+            self.freeze_bn()
 
     def forward(self, conv_out):
         low_level_feat = conv_out[1]
@@ -638,6 +694,7 @@ class Deeplab(nn.Module):
         x = F.interpolate(x, size=low_level_feat.size()[2:], mode='bilinear', align_corners=True)
         x = torch.cat((x, low_level_feat), dim=1)
         x = self.last_conv(x)
+        
 
         if self.use_softmax or segSize is not None:  # is True during inference
             x = nn.functional.upsample(
@@ -657,6 +714,13 @@ class Deeplab(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, SynchronizedBatchNorm2d):
+                m.eval()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.eval()
 
 # upernet+cspn
 class CspnUPerNet(nn.Module):
@@ -707,6 +771,16 @@ class CspnUPerNet(nn.Module):
             SynchronizedBatchNorm2d(8*cfg.MODEL.NUM_CLASSES),
         )
         self.cspn_net = Affinity_Propagate()
+        if cfg.SEM.FREEZE_BN:
+            self.freeze_bn
+
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, SynchronizedBatchNorm2d):
+                m.eval()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.eval()
+
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
 
@@ -802,6 +876,16 @@ class SpnUPerNet(nn.Module):
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
         self.spn_net = SPN()
+        if cfg.SEM.FREEZE_BN:
+            self.freeze_bn()
+
+    def freeze_bn(self):
+        for m in self.modules():
+            if isinstance(m, SynchronizedBatchNorm2d):
+                m.eval()
+            elif isinstance(m, nn.BatchNorm2d):
+                m.eval()
+
     def forward(self, conv_out, segSize=None):
         conv5 = conv_out[-1]
 
