@@ -5,7 +5,7 @@ MODEL:
   FASTER_RCNN: False
   NUM_CLASSES: 19
 RESNETS:
-    IMAGENET_PRETRAINED_WEIGHTS: 'coco_predtrain/model_final.pkl'
+    IMAGENET_PRETRAINED_WEIGHTS: 'coco_predtrain/R-101.pkl'
     #IMAGENET_PRETRAINED_WEIGHTS: 'pretrained/R-101.pkl'
     RES5_DILATION: 4
 SEM:
