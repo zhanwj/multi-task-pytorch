@@ -1,5 +1,4 @@
 MODEL:
-  #TYPE: generalized_semseg
   TYPE: Generalized_SEMSEG
   CONV_BODY: ResNet.ResNet50_conv4_body
   FASTER_RCNN: False

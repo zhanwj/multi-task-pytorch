@@ -210,6 +210,8 @@ class ModelBuilder():
             net_encoder = senet.__dict__['se_resnext50_dilate_32x4d'](dilate=8,pretrained=pretrained)
         elif arch == 'se_resnext101_dilate8_32x4d':
             net_encoder = senet.__dict__['se_resnext101_dilate_32x4d'](dilate=8,pretrained=pretrained)
+        elif arch == 'senet154_dilate8':
+            net_encoder = senet.__dict__['senet154_dilate'](dilate=8,pretrained=pretrained)
 
         elif arch == 'se_resnet50_dilate16':
             net_encoder = senet.__dict__['se_resnet50_dilate'](dilate=16,pretrained=pretrained)
@@ -221,6 +223,8 @@ class ModelBuilder():
             net_encoder = senet.__dict__['se_resnext50_dilate_32x4d'](dilate=16,pretrained=pretrained)
         elif arch == 'se_resnext101_dilate16_32x4d':
             net_encoder = senet.__dict__['se_resnext101_dilate_32x4d'](dilate=16,pretrained=pretrained)
+        elif arch == 'senet154_dilate16':
+            net_encoder = senet.__dict__['senet154_dilate'](dilate=16,pretrained=False)
         elif arch == 'xception':
             net_encoder=build_backbone('xception', 16, BatchNorm)
         else:

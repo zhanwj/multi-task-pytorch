@@ -172,43 +172,49 @@ class TestNet(object):
         resize_h = scale // 2
         resize_w = scale
         image = np.array(cv2.resize(image, (resize_w, resize_h)))
-        crop_h_max = min(resize_h - args.input_size[0], 0)
-        crop_w_max = min(resize_w - args.input_size[1], 0)
-        step_h = int(np.ceil(1.0*crop_h_max/ args.input_size[0]))
-        step_w = int(np.ceil(1.0*crop_w_max / args.input_size[1]))
+        im_shape = image.shape[:2] #720 1440
+        step_h = int(np.ceil(1.0*im_shape[0] / args.input_size[0]))
+        step_w = int(np.ceil(1.0*im_shape[1] / args.input_size[1]))
         one_list = []
         tmp_name = os.path.join(args.save_file, imgname.split('/')[-1])
-        boxes = []
         for ih in range(step_h):
             for iw in range(step_w):
                 inputs = np.zeros(args.input_size+[3])
-                crop_sh = min(ih*args.input_size[0], max(resize_h-args.input_size[0],0))
-                crop_sw = min(iw*args.input_size[1], max(resize_w-args.input_size[1],0))
-                crop_eh = min(resize_h, crop_sh+args.input_size[0])
-                crop_ew = min(resize_w, crop_sw+args.input_size[1])
-                in_eh = min(args.input_size[0], crop_eh-crop_sh)
-                in_ew = min(args.input_size[1], crop_ew-crop_sh)
-                inputs[0: in_eh, 0: in_ew] = image[crop_sh:in_eh, crop_sw:in_ew]
+                max_h = min(im_shape[0], (ih+1)*args.input_size[0])
+                max_w = min(im_shape[1], (iw+1)*args.input_size[1])
+                in_h= max_h - ih*args.input_size[0]
+                in_w= max_w - iw*args.input_size[1]
+                inputs[0: in_h, 0: in_w] = image[ih*args.input_size[0]: max_h,
+                        iw*args.input_size[1]: max_w]
                 #cv2.imwrite(tmp_name.replace('.png','%d_%d.png' %(ih, iw)), inputs)
                 inputs = inputs[:, :, ::-1]
                 inputs -= cfg.PIXEL_MEANS
                 inputs = inputs.transpose(2, 0, 1)
                 one_list.append(inputs.copy()) #因为copy操作可以在原先的numpy变量中创造一个新的不适用负索引的numpy变量。
-                boxes.append([crop_sh, crop_eh, crop_sw, crop_ew])
 
         #cv2.imwrite(tmp_name+'_.png', pred_prob[:1024, :2048, :])
-        return one_list, imgname.split('/')[-1], boxes
+        return one_list, imgname.split('/')[-1], [step_h, step_w]
 
     def save_pred(self, pred_list, image_name, scale_info, index, args): #拼起来
+        tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
         assert np.all(list(pred_list[0].shape[2:]) == args.input_size), 'pred size is not same to input size'
         assert np.all(pred_list[0] >=0), 'pred must be output of softmax'
-        assert pred_list[0].shape[0] == 1, 'only support one sample'
-        tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
+        assert pred_list[0].shape[0] == 1, 'per gpu only has one sample'
+        step_h, step_w = index
         scale, scale_i = scale_info
-        pred_prob=np.zeros(([0, self.num_class]+[scale//2, scale]))
-        for ids, ibox in enumerate(index):
-            sh,eh,sw,ew=ibox
-            pred_prob[:, :, sh:eh, sw:ew] = pred_list[ids]
+        for ih in range(step_h):
+            for iw in range(step_w):
+                if iw == 0:
+                    pred_w = pred_list[ih*step_w]
+                else:
+                    pred_w = np.concatenate((pred_w, pred_list[ih*step_w+iw]), axis=3)
+            if ih == 0:
+                pred_prob = pred_w
+            else:
+                pred_prob = np.concatenate((pred_prob, pred_w), axis=2)
+        max_h = scale // 2
+        max_w = scale
+        pred_prob = pred_prob[:, :, 0: max_h, 0: max_w] ## c,h,w
         write( tmp_name+'_'+str(scale_i)+'_prob.pkl', pred_prob)
 
     def save_multi_results(self, image_name, args): #多尺寸
@@ -217,7 +223,6 @@ class TestNet(object):
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
         for i, scale in enumerate(self.aug_scale):
             scale_pred = load(tmp_name+'_'+str(i)+'_prob.pkl')#(1, 19, 90, 180)
-            assert scale_pred.shape[0]==1, 'only support one sample'
             #pred_prob += self.up_sample(torch.from_numpy(scale_pred))[0].numpy()
             if image_name.endswith('_disp'):
                 pred_disp = cv2.resize(scale_pred[0][0], tuple(self.image_shape[::-1]), interpolation=cv2.INTER_LINEAR)

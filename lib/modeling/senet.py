@@ -14,9 +14,10 @@ from torch.utils import model_zoo
 from core.config import cfg
 __all__ = ['SENet', 'senet154', 'se_resnet50', 'se_resnet101', 'se_resnet152',
            'se_resnext50_32x4d', 'se_resnext101_32x4d','se_resnet50_dilate', 'se_resnet101_dilate', 'se_resnet152_dilate',
-           'se_resnext50_dilate_32x4d', 'se_resnext101_dilate_32x4d']
+           'se_resnext50_dilate_32x4d', 'se_resnext101_dilate_32x4d','senet154_dilate']
 model_urls = {
     'senet154': 'http://data.lip6.fr/cadene/pretrainedmodels/senet154-c7b49a05.pth',
+    #'senet154': 'http://data.lip6.fr/cadene/pretrainedmodels/SE154_2X.pkl',
     'se_resnet50': 'http://data.lip6.fr/cadene/pretrainedmodels/se_resnet50-ce0d4300.pth',
     'se_resnet101': 'http://data.lip6.fr/cadene/pretrainedmodels/se_resnet101-7e38fcc6.pth',
     'se_resnet152': 'http://data.lip6.fr/cadene/pretrainedmodels/se_resnet152-d17c99b7.pth',
@@ -559,6 +560,8 @@ def senet154(num_classes=1000, pretrained='imagenet'):
     return model
 
 
+
+
 def se_resnet50(num_classes=1000, pretrained='imagenet'):
     model = SENet(SEResNetBottleneck, [3, 4, 6, 3], groups=1, reduction=16,
                   dropout_p=None, inplanes=64, input_3x3=False,
@@ -672,6 +675,15 @@ def se_resnext101_dilate_32x4d(num_classes=1000, dilate=8,pretrained='imagenet')
         print("Processs to load pretrained model!")
         model.load_state_dict(load_url(model_urls['se_resnext101_32x4d']), strict=False)
         #initialize_pretrained_model(model, num_classes, settings)
+        print("Pretrained model load succeed!")
+    return model
+
+def senet154_dilate(num_classes=1000, pretrained='imagenet',dilate=8):
+    model = SENetDilate(SEBottleneck, [3, 8, 36, 3],dilate=dilate,groups=64, reduction=16,
+                  dropout_p=0.2, num_classes=num_classes)
+    if pretrained:
+        print("Processs to load pretrained model!")
+        model.load_state_dict(load_url(model_urls['senet154']),strict=False)
         print("Pretrained model load succeed!")
     return model
 

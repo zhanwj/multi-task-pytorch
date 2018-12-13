@@ -186,6 +186,7 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 return_dict['metrics'][k] = v.unsqueeze(0)
         else: # inference
              pred = self.decoder(self.encoder(data, return_feature_maps=True), segSize=cfg.SEM.INPUT_SIZE)
+             print (pred.shape)
              assert pred.shape[1]==cfg.MODEL.NUM_CLASSES, 'need to predict for all class'
              assert pred.shape[-1]==cfg.SEM.INPUT_SIZE[-1] and pred.shape[-2]==cfg.SEM.INPUT_SIZE[-2], 'need to output full size in semseg_heads'
              assert torch.sum(pred<0)==0, 'need to output softmax in semseg_heads'
