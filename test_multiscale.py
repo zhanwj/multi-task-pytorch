@@ -94,6 +94,7 @@ class TestNet(object):
         cfg_from_file(args.config)
         cfg.TRAIN.IMS_PER_BATCH = 1
         args.aug_scale=cfg.TRAIN.SCALES
+        args.input_size=cfg.SEM.INPUT_SIZE
         print ('test scale:',args.aug_scale)
         self._cur = 0
         if args.network == 'Generalized_SEGDISP':
@@ -132,6 +133,7 @@ class TestNet(object):
         #set device of gpu
         # assert False, 'use os.env to set device gpu %s'%str(args.gpus)
         os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(ids) for ids in args.gpu])
+        print (args.network)
         self.net = eval(args.network)()
         #init weight
         # pretrained_model = args.premodel
@@ -174,8 +176,8 @@ class TestNet(object):
         image = np.array(cv2.resize(image, (resize_w, resize_h)))
         crop_h_max = min(resize_h - args.input_size[0], 0)
         crop_w_max = min(resize_w - args.input_size[1], 0)
-        step_h = int(np.ceil(1.0*crop_h_max/ args.input_size[0]))
-        step_w = int(np.ceil(1.0*crop_w_max / args.input_size[1]))
+        step_h = int(np.floor(1.0*crop_h_max/ args.input_size[0]))+1
+        step_w = int(np.floor(1.0*crop_w_max / args.input_size[1]))+1
         one_list = []
         tmp_name = os.path.join(args.save_file, imgname.split('/')[-1])
         boxes = []
@@ -193,13 +195,14 @@ class TestNet(object):
                 inputs = inputs[:, :, ::-1]
                 inputs -= cfg.PIXEL_MEANS
                 inputs = inputs.transpose(2, 0, 1)
-                one_list.append(inputs.copy()) #因为copy操作可以在原先的numpy变量中创造一个新的不适用负索引的numpy变量。
+                one_list.append(inputs.copy()) 
                 boxes.append([crop_sh, crop_eh, crop_sw, crop_ew])
 
         #cv2.imwrite(tmp_name+'_.png', pred_prob[:1024, :2048, :])
         return one_list, imgname.split('/')[-1], boxes
 
     def save_pred(self, pred_list, image_name, scale_info, index, args): #拼起来
+        print (pred_list[0].shape)
         assert np.all(list(pred_list[0].shape[2:]) == args.input_size), 'pred size is not same to input size'
         assert np.all(pred_list[0] >=0), 'pred must be output of softmax'
         assert pred_list[0].shape[0] == 1, 'only support one sample'
@@ -289,13 +292,8 @@ def to_test_semseg(args):
             one_list, image_name, index = test_net.transfer_img(image, image_name, scale, args)
             for isave, im in enumerate(one_list): #剪成c多张图片 一张一张喂进去
                 input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
-                #input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False)
                 pred_dict = test_net.net(input_data)
-                
                 pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
-                #pred_list.append((pred_dict[args.prefix_semseg]).detach().numpy())
-                #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().cpu().numpy())
-                #pred_deepsup_list.append((pred_dict[args.prefix_average]).detach().numpy())
             test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args) #之后将图片合起来
             #test_net.save_pred(pred_deepsup_list, image_name + '_average', [scale, scale_i], index, args)
         test_net.save_multi_results(image_name,  args)
