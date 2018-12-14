@@ -84,6 +84,7 @@ def argument():
     parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_deepsup', type=str)
     parser.add_argument('--index_start', dest='index_start', help='predict from index_start', default=0, type=int)
     parser.add_argument('--index_end', dest='index_end', help='predict end with index_end', default=500, type=int)
+    parser.add_argument('--save_final_prob', dest='save_final_prob', help='to save prob for each class', default=False, type=bool)
     args = parser.parse_args()
     return args
 
@@ -107,10 +108,13 @@ class TestNet(object):
         else:
             self.load_image = self.load_semseg_image
             to_test = to_test_semseg(args)
-        if args.dataset == 'cityscapes':
+        if 'cityscape' in args.dataset:
             self.input_size = args.input_size
             self.aug_scale = args.aug_scale
-            self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/val.txt')
+            if 'train_on_val' in args.dataset:
+                self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/Cityscape_disp_SegFlow_train.txt')
+            else:
+                self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/val.txt')
             # self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/label_info_fine/test.txt')
             #self.label_root = os.path.join(os.getcwd(),'citycapes/label_info/onlytrain_label_citycapes_right.txt')
             self.num_class = 19
@@ -164,54 +168,60 @@ class TestNet(object):
         
     def load_semseg_image(self, args):
         imgname =  self.indexlist[self._cur][0].split('citycapes/')[-1]
-        image = cv2.imread(os.path.join(cfg.DATA_DIR, args.dataset, imgname))
+        image = cv2.imread(os.path.join(cfg.DATA_DIR, args.dataset.split('_')[0], imgname))
         cv2.imwrite(os.path.join(args.save_file, imgname.split('/')[-1]), image) #保存原图
         self._cur += 1
         return image, imgname
 
     # put image left and right into it, sparetion
     def transfer_img(self, image, imgname, scale, args): #将图片切分成多块
+        assert np.all(args.input_size==cfg.SEM.INPUT_SIZE), 'cfg size must be same to args'
         resize_h = scale // 2
         resize_w = scale
         image = np.array(cv2.resize(image, (resize_w, resize_h)))
-        crop_h_max = min(resize_h - args.input_size[0], 0)
-        crop_w_max = min(resize_w - args.input_size[1], 0)
-        step_h = int(np.floor(1.0*crop_h_max/ args.input_size[0]))+1
-        step_w = int(np.floor(1.0*crop_w_max / args.input_size[1]))+1
+        crop_h_max = max(resize_h - args.input_size[0], 0)
+        crop_w_max = max(resize_w - args.input_size[1], 0)
+        step_h = 1 + int(np.ceil(1.0*crop_h_max/ args.input_size[0]))
+        step_w = 1 + int(np.ceil(1.0*crop_w_max / args.input_size[1]))
         one_list = []
         tmp_name = os.path.join(args.save_file, imgname.split('/')[-1])
         boxes = []
         for ih in range(step_h):
             for iw in range(step_w):
                 inputs = np.zeros(args.input_size+[3])
-                crop_sh = min(ih*args.input_size[0], max(resize_h-args.input_size[0],0))
-                crop_sw = min(iw*args.input_size[1], max(resize_w-args.input_size[1],0))
+                crop_sh = min(ih*args.input_size[0], crop_h_max)
+                crop_sw = min(iw*args.input_size[1], crop_w_max)
                 crop_eh = min(resize_h, crop_sh+args.input_size[0])
                 crop_ew = min(resize_w, crop_sw+args.input_size[1])
-                in_eh = min(args.input_size[0], crop_eh-crop_sh)
-                in_ew = min(args.input_size[1], crop_ew-crop_sh)
-                inputs[0: in_eh, 0: in_ew] = image[crop_sh:in_eh, crop_sw:in_ew]
+                in_eh = crop_eh - crop_sh
+                in_ew = crop_ew - crop_sw
+                inputs[0: in_eh, 0: in_ew] = image[crop_sh:crop_eh, crop_sw:crop_ew]
                 #cv2.imwrite(tmp_name.replace('.png','%d_%d.png' %(ih, iw)), inputs)
                 inputs = inputs[:, :, ::-1]
                 inputs -= cfg.PIXEL_MEANS
                 inputs = inputs.transpose(2, 0, 1)
                 one_list.append(inputs.copy()) 
-                boxes.append([crop_sh, crop_eh, crop_sw, crop_ew])
-
+                boxes.append([crop_sh, crop_eh, crop_sw, crop_ew,in_eh,in_ew])
         #cv2.imwrite(tmp_name+'_.png', pred_prob[:1024, :2048, :])
         return one_list, imgname.split('/')[-1], boxes
 
     def save_pred(self, pred_list, image_name, scale_info, index, args): #拼起来
-        print (pred_list[0].shape)
+        assert np.all(args.input_size==cfg.SEM.INPUT_SIZE), 'cfg size must be same to args'
         assert np.all(list(pred_list[0].shape[2:]) == args.input_size), 'pred size is not same to input size'
         assert np.all(pred_list[0] >=0), 'pred must be output of softmax'
         assert pred_list[0].shape[0] == 1, 'only support one sample'
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
         scale, scale_i = scale_info
-        pred_prob=np.zeros(([0, self.num_class]+[scale//2, scale]))
+        pred_prob=-1*np.ones(([1, self.num_class]+[scale//2, scale]))
+        pred_smooth= np.zeros(([1, self.num_class]+[scale//2, scale]))
         for ids, ibox in enumerate(index):
-            sh,eh,sw,ew=ibox
-            pred_prob[:, :, sh:eh, sw:ew] = pred_list[ids]
+            sh,eh,sw,ew,in_h,in_w=ibox
+            pred_prob[:, :, sh:eh, sw:ew] = pred_list[ids][:, :, 0:in_h, 0:in_w]
+            pred_smooth[:, :, sh:eh, sw:ew] += 1
+        del pred_list
+        assert np.all(pred_prob !=-1), 'error merge'
+        assert np.all(pred_smooth >=1), 'error merge'
+        pred_prob /= pred_smooth
         write( tmp_name+'_'+str(scale_i)+'_prob.pkl', pred_prob)
 
     def save_multi_results(self, image_name, args): #多尺寸
@@ -229,6 +239,9 @@ class TestNet(object):
                 for ic in range(self.num_class): ##
                     pred_prob[ic] += cv2.resize(scale_pred[0][ic], tuple(self.image_shape[::-1]), interpolation=cv2.INTER_LINEAR)
             os.remove(tmp_name+'_'+str(i)+'_prob.pkl')
+        if args.save_final_prob:
+            pred_prob /= num_scale
+            write( tmp_name+arg.config.split('/')[-1].split('.')[0]+'_prob.pkl', pred_prob)
         pred_prob = np.argmax(pred_prob, axis=0) #(1024, 2048)
         if image_name.endswith('_disp'):
             pass
@@ -295,6 +308,8 @@ def to_test_semseg(args):
                 pred_dict = test_net.net(input_data)
                 pred_list.append((pred_dict[args.prefix_semseg]).detach().cpu().numpy())
             test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args) #之后将图片合起来
+            del pred_list
+            del one_list
             #test_net.save_pred(pred_deepsup_list, image_name + '_average', [scale, scale_i], index, args)
         test_net.save_multi_results(image_name,  args)
         #test_net.save_multi_results(image_name + '_average',  args)

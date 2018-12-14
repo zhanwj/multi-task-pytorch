@@ -5,7 +5,6 @@ import torch.nn as nn
 import math
 from core.config import cfg
 from lib.nn import SynchronizedBatchNorm2d
-
 if cfg.SEM.FREEZE_BN:
     print("yes")
     from lib.nn import AffineChannel2d
