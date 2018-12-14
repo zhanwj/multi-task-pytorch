@@ -51,7 +51,9 @@ f2.close()
 
 coarse_train_list=readlines(os.path.join(save_path,coarse_train))
 fine_train_list=readlines(os.path.join(save_path,fine_train))
-coarse_train_list.extend(fine_train_list)
+for i in range(4):
+    coarse_train_list.extend(fine_train_list)
+print("Total Number of samples:",len(coarse_train_list))
 random.shuffle(coarse_train_list)
 
 writelines(os.path.join(save_path,coarse_fine_mixed),coarse_train_list)

@@ -154,9 +154,10 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         semseg_label[prob_pos>cfg.SEM.OHEM_POS] = 255
         pred_semseg = F.log_softmax(pred_semseg, dim=1)
         loss = self.crit(pred_semseg, semseg_label)
+        acc = self.pixel_acc(pred_semseg, semseg_label)
         del scan_pos 
         del scan
-        return loss
+        return loss, acc
 
     def forward(self, data, **feed_dict):
         return_dict = {}

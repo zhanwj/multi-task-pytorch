@@ -101,6 +101,7 @@ class ModelBuilder():
         
     def build_encoder(self, arch='resnet50_dilated8', fc_dim=512, weights=''):
         if cfg.SEM.FREEZE_BN:
+            print("Using AffineChannel2d as SynchronizedBatchNorm2d")
             from lib.nn import AffineChannel2d
             global SynchronizedBatchNorm2d
             SynchronizedBatchNorm2d = AffineChannel2d
@@ -676,6 +677,8 @@ class UPerNet(nn.Module):
         )
 
     def forward(self, conv_out, segSize=None):
+        if (len(conv_out)>4):
+            conv_out.pop(0)
         conv5 = conv_out[-1]
 
         input_size = conv5.size()

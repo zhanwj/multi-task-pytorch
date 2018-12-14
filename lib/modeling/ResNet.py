@@ -121,6 +121,7 @@ class ResNet_convX_body(nn.Module):
             conv_out.append(x)
         if return_feature_maps:
             return conv_out
+
         else:
             return x
 
