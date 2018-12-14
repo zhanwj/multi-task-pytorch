@@ -84,7 +84,7 @@ def argument():
     parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_deepsup', type=str)
     parser.add_argument('--index_start', dest='index_start', help='predict from index_start', default=0, type=int)
     parser.add_argument('--index_end', dest='index_end', help='predict end with index_end', default=500, type=int)
-    parser.add_argument('--save_final_prob', dest='save_final_prob', help='to save prob for each class', default=False, type=bool)
+    parser.add_argument('--save_final_prob', dest='save_final_prob', help='to save prob for each class',  default=0, type=int)
     args = parser.parse_args()
     return args
 
@@ -146,7 +146,7 @@ class TestNet(object):
         state_dict={}
         pretrained=torch.load(self.pretrained_model, map_location=lambda storage, loc: storage)
         pretrained = pretrained['model']
-        self.net.load_state_dict(pretrained,strict=False)
+        self.net.load_state_dict(pretrained,strict=True)
         self.net.to('cuda')
         print("weights load success")
         self.net.eval()
@@ -216,7 +216,7 @@ class TestNet(object):
         pred_smooth= np.zeros(([1, self.num_class]+[scale//2, scale]))
         for ids, ibox in enumerate(index):
             sh,eh,sw,ew,in_h,in_w=ibox
-            pred_prob[:, :, sh:eh, sw:ew] = pred_list[ids][:, :, 0:in_h, 0:in_w]
+            pred_prob[:, :, sh:eh, sw:ew] += pred_list[ids][:, :, 0:in_h, 0:in_w]
             pred_smooth[:, :, sh:eh, sw:ew] += 1
         del pred_list
         assert np.all(pred_prob !=-1), 'error merge'

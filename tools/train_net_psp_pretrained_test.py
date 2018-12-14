@@ -316,12 +316,13 @@ def main():
     else:
         maskRCNN = Generalized_RCNN()
     """
-    #print("loading pspnet weights")
-    #state_dict={}
-    #pretrained=torch.load(cfg.SEM.PSPNET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
-    #pretrained = pretrained['model']
-    #maskRCNN.load_state_dict(pretrained,strict=False)
-    #print("weights load success")
+    if cfg.SEM.PSPNET_PRETRAINED_WEIGHTS  is not None:
+        print("loading pspnet weights")
+        state_dict={}
+        pretrained=torch.load(cfg.SEM.PSPNET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
+        pretrained = pretrained['model']
+        maskRCNN.load_state_dict(pretrained,strict=False)
+        print("weights load success")
 
     if cfg.CUDA:
         maskRCNN.to('cuda')

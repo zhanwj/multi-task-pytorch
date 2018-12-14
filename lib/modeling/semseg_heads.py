@@ -142,7 +142,7 @@ class ModelBuilder():
             print ('loading weights is done')
             if cfg.TRAIN.FREEZE_CONV_BODY:
                 print ('freeze train conv_body')
-                for p in self.Conv_Body.parameters():
+                for p in net_encoder.parameters():
                     p.requires_grad = False
 
             #print ('loading pretrained model for ResNet')

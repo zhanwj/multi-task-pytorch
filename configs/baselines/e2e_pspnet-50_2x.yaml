@@ -4,7 +4,7 @@ MODEL:
   FASTER_RCNN: False
   NUM_CLASSES: 19
 RESNETS:
-    IMAGENET_PRETRAINED_WEIGHTS: 'coco_pretrain/R-50.pkl'
+    IMAGENET_PRETRAINED_WEIGHTS: 'coco_predtrain/R-50.pkl'
 SEM:
     SEM_ON: True
     UNION: False

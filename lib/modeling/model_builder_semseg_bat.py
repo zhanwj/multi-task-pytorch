@@ -114,7 +114,6 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             self.loss_semseg = self.loss_ohem
 
 
-
     def freeze_bn(self):
         for m in self.modules():
             if isinstance(m, SynchronizedBatchNorm2d):
