@@ -236,6 +236,9 @@ def main():
     elif args.dataset == "cityscape_train_on_val":
         cfg.TRAIN.DATASETS = ('cityscape_train_on_val', )
         cfg.MODEL.NUM_CLASSES = 19
+    elif args.dataset == "cityscapes_coarse":
+        cfg.TRAIN.DATASETS = ('cityscapes_coarse', )
+        cfg.MODEL.NUM_CLASSES = 19
     elif args.dataset == "cityscapes_all":
         cfg.TRAIN.DATASETS = ('cityscapes_all', )
         cfg.MODEL.NUM_CLASSES = 19
@@ -430,7 +433,6 @@ def main():
         global_step = iters_per_epoch * args.start_epoch + args.step
         for args.epoch in range(args.start_epoch, args.start_epoch + args.num_epochs):
             # ---- Start of epoch ----
-
             # adjust learning rate
             if args.lr_decay_epochs and args.epoch == args.lr_decay_epochs[0] and args.start_iter == 0 and cfg.SOLVER.LR_POLICY=='steps_with_decay' :
                 args.lr_decay_epochs.pop(0)
@@ -452,6 +454,7 @@ def main():
                 for key in input_data:
                     if key != 'roidb': # roidb is a list of ndarrays with inconsistent length
                         input_data[key] = list(map(lambda x: Variable(x, requires_grad=False).to('cuda'), input_data[key]))
+                
                 training_stats.IterTic()
                 net_outputs = maskRCNN(**input_data)
                 training_stats.UpdateIterStats(net_outputs)

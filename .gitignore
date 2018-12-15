@@ -4,6 +4,7 @@ data/*
 *.pyc
 *.tar
 *.sh
+*.mat
 *~
 *chenlong2@*
 nohup.out
