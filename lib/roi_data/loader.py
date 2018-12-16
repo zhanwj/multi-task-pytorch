@@ -12,7 +12,7 @@ from core.config import cfg
 from roi_data.minibatch import get_minibatch
 import utils.blob as blob_utils
 # from model.rpn.bbox_transform import bbox_transform_inv, clip_boxes
-
+import random
 
 class RoiDataLoader(data.Dataset):
     def __init__(self, roidb, num_classes, training=True):
@@ -20,9 +20,16 @@ class RoiDataLoader(data.Dataset):
         self._num_classes = num_classes
         self.training = training
         self.DATA_SIZE = len(self._roidb)
+        if cfg.SEM.SEM_ON or cfg.DISP.DISP_ON:
+            random.shuffle(self._roidb)
+            print ('==============shuffle dataset==============')
 
     def __getitem__(self, index_tuple):
-        index, ratio = index_tuple
+        #index, ratio = index_tuple
+        index  = index_tuple
+        if cfg.SEM.SEM_ON and index == self.DATA_SIZE:
+            random.shuffle(self._roidb)
+            print ('=============shuffle dataset==============')
         single_db = [self._roidb[index]]
         blobs, valid = get_minibatch(single_db)
         #cv2.imwrite('semseg.png',blobs['semseg_label_0'][0])
@@ -258,8 +265,7 @@ def collate_minibatch(list_of_blobs):
         # Pad image data
         mini_list = pad_image_data(mini_list)
         minibatch = default_collate(mini_list)
-        if not cfg.SEM.SEM_ON and not cfg.DISP.DISP_ON:
-            minibatch['roidb'] = list_of_roidb[i:(i + cfg.TRAIN.IMS_PER_BATCH)]
+        minibatch['roidb'] = list_of_roidb[i:(i + cfg.TRAIN.IMS_PER_BATCH)]
         for key in minibatch:
             Batch[key].append(minibatch[key])
 

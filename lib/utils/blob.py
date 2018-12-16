@@ -101,6 +101,9 @@ def get_max_shape(im_shapes):
     return max_shape
 
 
+def round2nearest_multiple(x, p):
+    return ((x - 1) // p + 1) * p
+
 def prep_multitask_im_for_blob(im, pixel_means, target_sizes, max_size, followed=False):
     """Prepare an image for use as a network input blob. Specially:
       - Subtract per-channel pixel mean
@@ -127,6 +130,8 @@ def prep_multitask_im_for_blob(im, pixel_means, target_sizes, max_size, followed
         return [input_data], target_sizes
 
     for target_size in target_sizes:
+        net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
+        target_size = round2nearest_multiple(target_size, net_stride)
         im_resized = cv2.resize(im, (target_size, target_size//2))
         im_resized, crop_index = crop_image(im_resized)
         ims.append(im_resized)

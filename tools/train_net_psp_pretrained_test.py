@@ -295,7 +295,8 @@ def main():
     logger.info('{:d} roidb entries'.format(train_size))
     logger.info('Takes %.2f sec(s) to construct roidb', timers['roidb'].average_time)
 
-    sampler = MinibatchSampler(ratio_list, ratio_index)
+    #sampler = MinibatchSampler(ratio_list, ratio_index)
+    sampler = None
     dataset = RoiDataLoader(
         roidb,
         cfg.MODEL.NUM_CLASSES,
@@ -305,20 +306,20 @@ def main():
         batch_size=args.batch_size,
         sampler=sampler,
         num_workers=cfg.DATA_LOADER.NUM_THREADS,
-        collate_fn=collate_minibatch_semseg if cfg.SEM.SEM_ON or cfg.DISP.DISP_ON else collate_minibatch)
+        collate_fn=collate_minibatch_semseg if cfg.SEM.SEM_ON or cfg.DISP.DISP_ON else collate_minibatch,
+        drop_last=False,
+        shuffle=False) # when load image will be shuffle in each epoch
 
     assert_and_infer_cfg()
+    #for data in dataloader:
+    #    image = data['data'][0].squeeze(0).numpy()
+    #    print (image.shape)
+    #    image=image.transpose(1,2,0)+cfg.PIXEL_MEANS
+    #    cv2.imwrite('image.png', image[:,:,::-1])
+    #    cv2.imwrite('label.png',data['semseg_label_0'][0].squeeze(0).numpy())
+    #    return
     
     maskRCNN = eval(cfg.MODEL.TYPE)()
-    """
-    if cfg.SEM.SEM_ON:
-        if not cfg.DISP.DISP_ON:
-            maskRCNN = Generalized_SEMSEG()
-        else:
-            maskRCNN = Generalized_3DSD()
-    else:
-        maskRCNN = Generalized_RCNN()
-    """
     if len(cfg.SEM.PSPNET_PRETRAINED_WEIGHTS)>1:
         print("loading pspnet weights")
         state_dict={}
@@ -347,8 +348,6 @@ def main():
          'lr': cfg.SOLVER.BASE_LR * (cfg.SOLVER.BIAS_DOUBLE_LR + 1),
          'weight_decay': cfg.SOLVER.WEIGHT_DECAY if cfg.SOLVER.BIAS_WEIGHT_DECAY else 0}
     ]
-
-
 
 
     if cfg.SOLVER.TYPE == "SGD":
@@ -454,7 +453,6 @@ def main():
                 for key in input_data:
                     if key != 'roidb': # roidb is a list of ndarrays with inconsistent length
                         input_data[key] = list(map(lambda x: Variable(x, requires_grad=False).to('cuda'), input_data[key]))
-                
                 training_stats.IterTic()
                 net_outputs = maskRCNN(**input_data)
                 training_stats.UpdateIterStats(net_outputs)

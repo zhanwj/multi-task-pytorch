@@ -88,6 +88,8 @@ def argument():
     args = parser.parse_args()
     return args
 
+def round2nearest_multiple(x, p):
+    return ((x - 1) // p + 1) * p
 
 class TestNet(object):
     def __init__(self, args):
@@ -178,7 +180,7 @@ class TestNet(object):
         assert np.all(args.input_size==cfg.SEM.INPUT_SIZE), 'cfg size must be same to args'
         resize_h = scale // 2
         resize_w = scale
-        image = np.array(cv2.resize(image, (resize_w, resize_h)))
+        image = np.array(cv2.resize(image.copy(), (resize_w, resize_h)))
         crop_h_max = max(resize_h - args.input_size[0], 0)
         crop_w_max = max(resize_w - args.input_size[1], 0)
         step_h = 1 + int(np.ceil(1.0*crop_h_max/ args.input_size[0]))
@@ -212,14 +214,12 @@ class TestNet(object):
         assert pred_list[0].shape[0] == 1, 'only support one sample'
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
         scale, scale_i = scale_info
-        pred_prob=-1*np.ones(([1, self.num_class]+[scale//2, scale]))
+        pred_prob=np.zeros(([1, self.num_class]+[scale//2, scale]))
         pred_smooth= np.zeros(([1, self.num_class]+[scale//2, scale]))
         for ids, ibox in enumerate(index):
             sh,eh,sw,ew,in_h,in_w=ibox
             pred_prob[:, :, sh:eh, sw:ew] += pred_list[ids][:, :, 0:in_h, 0:in_w]
             pred_smooth[:, :, sh:eh, sw:ew] += 1
-        del pred_list
-        assert np.all(pred_prob !=-1), 'error merge'
         assert np.all(pred_smooth >=1), 'error merge'
         pred_prob /= pred_smooth
         write( tmp_name+'_'+str(scale_i)+'_prob.pkl', pred_prob)
@@ -299,6 +299,8 @@ def to_test_semseg(args):
         time_now = time.time()
         image, image_name = test_net.load_image(args)
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
+            net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
+            scale = round2nearest_multiple(scale, net_stride)
             #cfg_from_file(args.config)
             pred_list = [] ##预测的数据
             #pred_deepsup_list = []
