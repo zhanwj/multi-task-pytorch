@@ -97,8 +97,10 @@ class TestNet(object):
         # assert False, 'merge config'
         cfg_from_file(args.config)
         cfg.TRAIN.IMS_PER_BATCH = 1
-        args.aug_scale=cfg.TRAIN.SCALES
-        args.input_size=cfg.SEM.INPUT_SIZE
+        args.aug_scale=[416]
+        args.input_size=[184,416]
+        #args.aug_scale=cfg.TRAIN.SCALES
+        #args.input_size=cfg.SEM.INPUT_SIZE
         print ('test scale:',args.aug_scale)
         self._cur = 0
         if args.network == 'Generalized_SEGDISP':

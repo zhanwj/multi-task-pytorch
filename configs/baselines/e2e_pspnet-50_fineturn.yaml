@@ -5,6 +5,7 @@ MODEL:
   NUM_CLASSES: 19
 RESNETS:
     IMAGENET_PRETRAINED_WEIGHTS: 'coco_predtrain/R-50.pkl'
+    RES5_DILATION: 4
 SEM:
     SEM_ON: True
     UNION: False
@@ -20,7 +21,7 @@ SEM:
     OUTPUT_PREFIX: 'semseg_label'
     OHEM_ON: False
     OHEM_POS: 0.9
-    PSPNET_PRETRAINED_WEIGHTS: './cityscapes_final/pspnet50_coarse.pth'
+    PSPNET_PRETRAINED_WEIGHTS: './cityscapes_final/pspnet50_model_30.pth'
 DISP:
     DISP_ON: False
 NUM_GPUS: 8
@@ -56,4 +57,4 @@ TEST:
   NMS: 0.5
   RPN_PRE_NMS_TOP_N: 1000  # Per FPN level
   RPN_POST_NMS_TOP_N: 1000
-OUTPUT_DIR: ./output/cityscape_train_on_val/pspnet50_30bs_coco_pretrain_fineturn
+OUTPUT_DIR: ./output/cityscapes/pspnet50_20bs_coco_pretrain_fineturn_0001
