@@ -5,6 +5,7 @@ MODEL:
   NUM_CLASSES: 19
 RESNETS:
     IMAGENET_PRETRAINED_WEIGHTS: 'coco_predtrain/R-50.pkl'
+    RES5_DILATION: 4
 SEM:
     SEM_ON: True
     UNION: False
