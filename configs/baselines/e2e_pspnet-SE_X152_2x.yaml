@@ -11,6 +11,7 @@ SEM:
     UNION: False
     FC_DIM: 2048
     DIM: 512
+    FREEZE_BN: True
     INPUT_SIZE: [720, 720]
     TRAINSET: 'train'
     ARCH_ENCODER: 'resnet50_dilated8'

@@ -15,6 +15,7 @@ SEM:
     ARCH_ENCODER: 'se_resnet152_dilate16'
     DECODER_TYPE: 'upernet'
     DEEP_SUB_SCALE: [1.0, 0.4]
+    FREEZE_BN: True
     DOWNSAMPLE: [0, 3]
     OUTPUT_PREFIX: 'semseg_label'
     OHEM_ON: False
