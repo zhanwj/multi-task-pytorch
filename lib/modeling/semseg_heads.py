@@ -626,6 +626,7 @@ class PPMBilinearDeepsup(nn.Module):
         _ = self.cbr_deepsup(conv4)
         _ = self.dropout_deepsup(_)
         _ = self.conv_last_deepsup(_)
+        print("x:",x.shape)
 
 
         return (x, _)

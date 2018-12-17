@@ -75,7 +75,7 @@ def argument():
     parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/wq/real_test/', type=str)
     parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[6], type=list)
     parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[720,720], type=int)
-    parser.add_argument('--data_dir', dest='data_dir', help='input image of network', default="/home/zhanwj/Desktop/pyTorch/wq/real_test.txt", type=str)
+    parser.add_argument('--data_dir', dest='data_dir', help='input image of network', default="/home/zhanwj/Desktop/pyTorch/wq/real_test/", type=str)
     parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1440], type=int)
     parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
     # parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
@@ -114,16 +114,18 @@ class TestNet(object):
         if 'cityscape' in args.dataset:
             self.input_size = args.input_size
             self.aug_scale = args.aug_scale
-            if 'train_on_val' in args.dataset:
-                self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/Cityscape_disp_SegFlow_train.txt')
-            if 'wq' in args.dataset:
-                self.label_root = '/home/zhanwj/Desktop/pyTorch/wq/real_test.txt'
-            else:
-                self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/val.txt')
-            # self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/label_info_fine/test.txt')
-            #self.label_root = os.path.join(os.getcwd(),'citycapes/label_info/onlytrain_label_citycapes_right.txt')
-            self.num_class = 19
-            self.image_shape=[1024, 2048]
+        if 'train_on_val' in args.dataset:
+            self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/Cityscape_disp_SegFlow_train.txt')
+            self.aug_scale = args.aug_scale
+        if 'wq' in args.dataset:
+            self.aug_scale = args.aug_scale
+            self.label_root = '/home/zhanwj/Desktop/pyTorch/wq/real_test.txt'
+        else:
+            self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/annotations/val.txt')
+        # self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/label_info_fine/test.txt')
+        #self.label_root = os.path.join(os.getcwd(),'citycapes/label_info/onlytrain_label_citycapes_right.txt')
+        self.num_class = 19
+        self.image_shape=[1024, 2048]
         self.load_listname(args)
         self.pretrained_model=args.premodel
         #transformer label
@@ -172,8 +174,13 @@ class TestNet(object):
         return image, img_L
         
     def load_semseg_image(self, args):
+
         imgname =  self.indexlist[self._cur][0].split('citycapes/')[-1]
-        image = cv2.imread(os.path.join(args.data_dir, args.dataset.split('_')[0], imgname))
+        print("imgname:",imgname)
+        image_path=os.path.join(args.data_dir, imgname)
+        print("image_path:",image_path)
+        image = cv2.imread(os.path.join(args.data_dir, imgname))
+        print(type(image))
         cv2.imwrite(os.path.join(args.save_file, imgname.split('/')[-1]), image) #保存原图
         self._cur += 1
         return image, imgname
