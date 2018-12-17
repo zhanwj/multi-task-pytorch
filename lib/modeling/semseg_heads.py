@@ -389,6 +389,7 @@ class ResnetDilated(nn.Module):
                     m.padding = (dilate, dilate)
 
     def forward(self, x, return_feature_maps=False):
+        print("input:",x.shape)
         conv_out = []
 
         x = self.relu1(self.bn1(self.conv1(x)))
