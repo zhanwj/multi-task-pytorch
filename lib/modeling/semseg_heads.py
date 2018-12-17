@@ -389,7 +389,6 @@ class ResnetDilated(nn.Module):
                     m.padding = (dilate, dilate)
 
     def forward(self, x, return_feature_maps=False):
-        print("input:",x.shape)
         conv_out = []
 
         x = self.relu1(self.bn1(self.conv1(x)))
@@ -627,7 +626,6 @@ class PPMBilinearDeepsup(nn.Module):
         _ = self.cbr_deepsup(conv4)
         _ = self.dropout_deepsup(_)
         _ = self.conv_last_deepsup(_)
-        print("x:",x.shape)
 
 
         return (x, _)
