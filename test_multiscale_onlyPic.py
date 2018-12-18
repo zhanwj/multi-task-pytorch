@@ -84,7 +84,7 @@ def argument():
     parser.add_argument('--prefix_disp', dest='prefix_disp', help='output name of network', default='pred_disp', type=str)
     parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_deepsup', type=str)
     parser.add_argument('--index_start', dest='index_start', help='predict from index_start', default=0, type=int)
-    parser.add_argument('--index_end', dest='index_end', help='predict end with index_end', default=500, type=int)
+    parser.add_argument('--index_end', dest='index_end', help='predict end with index_end', default=2770, type=int)
     parser.add_argument('--save_final_prob', dest='save_final_prob', help='to save prob for each class',  default=0, type=int)
     args = parser.parse_args()
     return args
@@ -99,6 +99,7 @@ class TestNet(object):
         cfg.TRAIN.IMS_PER_BATCH = 1
         args.aug_scale=[416]
         args.input_size=[184,416]
+        cfg.SEM.INPUT_SIZE=[184,416]
         #args.aug_scale=cfg.TRAIN.SCALES
         #args.input_size=cfg.SEM.INPUT_SIZE
         print ('test scale:',args.aug_scale)
@@ -127,7 +128,7 @@ class TestNet(object):
         # self.label_root = os.path.join(os.getcwd(),'lib/datasets/data/cityscapes/label_info_fine/test.txt')
         #self.label_root = os.path.join(os.getcwd(),'citycapes/label_info/onlytrain_label_citycapes_right.txt')
         self.num_class = 19
-        self.image_shape=[1024, 2048]
+        self.image_shape=[184, 416]
         self.load_listname(args)
         self.pretrained_model=args.premodel
         #transformer label
@@ -189,6 +190,7 @@ class TestNet(object):
 
     # put image left and right into it, sparetion
     def transfer_img(self, image, imgname, scale, args): #将图片切分成多块
+        
         assert np.all(args.input_size==cfg.SEM.INPUT_SIZE), 'cfg size must be same to args'
         resize_h = scale // 2
         resize_w = scale

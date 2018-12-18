@@ -150,11 +150,11 @@ class TestNet(object):
         pretrained = pretrained['model']
         self.net.load_state_dict(pretrained,strict=True)
         self.net.to('cuda')
-        del pretrained
         print("weights load success")
         self.net.eval()
         for p in self.net.parameters():
             p.requires_grad = False
+        del pretrained
 
         #checkpoint = torch.load(self.pretrained_model)
         #self.net.load_state_dict(checkpoint['model'])
