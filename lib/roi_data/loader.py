@@ -20,16 +20,16 @@ class RoiDataLoader(data.Dataset):
         self._num_classes = num_classes
         self.training = training
         self.DATA_SIZE = len(self._roidb)
-        if cfg.SEM.SEM_ON or cfg.DISP.DISP_ON:
-            random.shuffle(self._roidb)
-            print ('==============shuffle dataset==============')
+        #if cfg.SEM.SEM_ON or cfg.DISP.DISP_ON:
+        #    random.shuffle(self._roidb)
+        #    print ('==============shuffle dataset==============')
 
     def __getitem__(self, index_tuple):
         #index, ratio = index_tuple
         index  = index_tuple
-        if cfg.SEM.SEM_ON and index == self.DATA_SIZE:
-            random.shuffle(self._roidb)
-            print ('=============shuffle dataset==============')
+        #if cfg.SEM.SEM_ON and index == self.DATA_SIZE:
+        #    random.shuffle(self._roidb)
+        #    print ('=============shuffle dataset==============')
         single_db = [self._roidb[index]]
         blobs, valid = get_minibatch(single_db)
         #cv2.imwrite('semseg.png',blobs['semseg_label_0'][0])

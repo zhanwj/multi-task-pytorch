@@ -308,15 +308,15 @@ def main():
         num_workers=cfg.DATA_LOADER.NUM_THREADS,
         collate_fn=collate_minibatch_semseg if cfg.SEM.SEM_ON or cfg.DISP.DISP_ON else collate_minibatch,
         drop_last=False,
-        shuffle=False) # when load image will be shuffle in each epoch
+        shuffle=True) # when load image will be shuffle in each epoch
 
     assert_and_infer_cfg()
     #for data in dataloader:
-    #    image = data['data'][0].squeeze(0).numpy()
+    #    image = data['data'][0][0].numpy()
     #    print (image.shape)
     #    image=image.transpose(1,2,0)+cfg.PIXEL_MEANS
     #    cv2.imwrite('image.png', image[:,:,::-1])
-    #    cv2.imwrite('label.png',data['semseg_label_0'][0].squeeze(0).numpy())
+    #    cv2.imwrite('label.png',10*data['semseg_label_0'][0][0].numpy())
     #    return
     
     maskRCNN = eval(cfg.MODEL.TYPE)()
