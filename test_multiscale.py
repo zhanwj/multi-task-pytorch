@@ -301,8 +301,8 @@ def to_test_semseg(args):
         time_now = time.time()
         image, image_name = test_net.load_image(args)
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
-            net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
-            scale = round2nearest_multiple(scale, net_stride)
+            #net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
+            #scale = round2nearest_multiple(scale, net_stride)
             #cfg_from_file(args.config)
             pred_list = [] ##预测的数据
             #pred_deepsup_list = []

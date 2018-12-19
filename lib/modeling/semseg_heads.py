@@ -76,7 +76,7 @@ class SegmentationModule(SegmentationModuleBase):
 def conv3x3(in_planes, out_planes, stride=1, has_bias=False):
     "3x3 convolution with padding"
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS)
+                     padding=1, bias=has_bias)
 
 
 def conv3x3_bn_relu(in_planes, out_planes, stride=1):
@@ -540,7 +540,7 @@ class PPMBilinear(nn.Module):
 
         self.conv_last = nn.Sequential(
             nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
-                      kernel_size=3, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+                      kernel_size=3, padding=1, bias=False),
             SynchronizedBatchNorm2d(512),
             nn.ReLU(inplace=True),
             nn.Dropout2d(0.1),
@@ -591,7 +591,7 @@ class PPMBilinearDeepsup(nn.Module):
 
         self.conv_last = nn.Sequential(
             nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
-                      kernel_size=3, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+                      kernel_size=3, padding=1, bias=False),
             SynchronizedBatchNorm2d(512),
             nn.ReLU(inplace=True),
             nn.Dropout2d(0.1),
@@ -646,7 +646,7 @@ class UPerNet(nn.Module):
         for scale in pool_scales:
             self.ppm_pooling.append(nn.AdaptiveAvgPool2d(scale))
             self.ppm_conv.append(nn.Sequential(
-                nn.Conv2d(fc_dim, 512, kernel_size=1,  bias=False),
+                nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(512),
                 nn.ReLU(inplace=True)
             ))
@@ -729,14 +729,14 @@ class Deeplab(nn.Module):
         #aspp
         self.aspp = build_aspp(backbone, 16, BatchNorm)
         #decoder
-        self.conv1 = nn.Conv2d(low_level_inplanes, 48, 1, bias=False, groups=cfg.RESNETS.NUM_GROUPS)
+        self.conv1 = nn.Conv2d(low_level_inplanes, 48, 1, bias=False)
         self.bn1 = BatchNorm(48)
         self.relu = nn.ReLU()
-        self.last_conv = nn.Sequential(nn.Conv2d(304, 256, kernel_size=3, stride=1, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+        self.last_conv = nn.Sequential(nn.Conv2d(304, 256, kernel_size=3, stride=1, padding=1, bias=False),
                                        BatchNorm(256),
                                        nn.ReLU(),
                                        nn.Dropout(0.5),
-                                       nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+                                       nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False),
                                        BatchNorm(256),
                                        nn.ReLU(),
                                        nn.Dropout(0.1),
@@ -819,7 +819,7 @@ class CspnUPerNet(nn.Module):
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
         self.cspn_last = nn.Sequential(
-            nn.Conv2d(len(fpn_inplanes) * fpn_dim, 8*cfg.MODEL.NUM_CLASSES, 3, padding=1, groups=cfg.RESNETS.NUM_GROUPS),
+            nn.Conv2d(len(fpn_inplanes) * fpn_dim, 8*cfg.MODEL.NUM_CLASSES, 3, padding=1),
             SynchronizedBatchNorm2d(8*cfg.MODEL.NUM_CLASSES),
         )
         self.cspn_net = Affinity_Propagate()
