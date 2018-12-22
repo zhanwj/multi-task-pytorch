@@ -58,6 +58,10 @@ class ResNet_convX_body(nn.Module):
         else:
             self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
                                       dilation=1, stride_init=2)
+        #else:
+        #    print ('+++++++++++++++++++++call with 8x for ubernet+++++++++++++++++++++')
+        #    self.res4, dim_in = add_stage_test(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
+        #                              dilation=2, stride_init=1)
         if len(block_counts) == 4:
             stride_init = 2 if cfg.RESNETS.RES5_DILATION == 1 else 1
             self.res5, dim_in = add_stage(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
@@ -165,6 +169,24 @@ class ResNet_roi_conv5_head(nn.Module):
         else:
             return x
 
+
+def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
+    """Make a stage consist of `nblocks` residual blocks.
+    Returns:
+        - stage module: an nn.Sequentail module of residual blocks
+        - final output dimension
+    """
+    res_blocks = []
+    stride = stride_init
+    for _ in range(nblocks):
+        res_blocks.append(add_residual_block(
+            inplanes, outplanes, innerplanes, dilation, stride
+        ))
+        inplanes = outplanes
+        stride = 1
+        dilation = 1
+
+    return nn.Sequential(*res_blocks), outplanes
 
 def add_stage(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
     """Make a stage consist of `nblocks` residual blocks.

@@ -4,7 +4,6 @@ import torchvision
 from core.config import cfg
 from . import resnet, resnext,senet
 import modeling.ResNet as ResNet
-import modeling.ResNet_train as ResNet_train
 from lib.nn import SynchronizedBatchNorm2d
 import math
 from modeling.backbone import build_backbone
@@ -77,7 +76,7 @@ class SegmentationModule(SegmentationModuleBase):
 def conv3x3(in_planes, out_planes, stride=1, has_bias=False):
     "3x3 convolution with padding"
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS)
+                     padding=1, bias=has_bias)
 
 
 def conv3x3_bn_relu(in_planes, out_planes, stride=1):
@@ -541,7 +540,7 @@ class PPMBilinear(nn.Module):
 
         self.conv_last = nn.Sequential(
             nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
-                      kernel_size=3, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+                      kernel_size=3, padding=1, bias=False),
             SynchronizedBatchNorm2d(512),
             nn.ReLU(inplace=True),
             nn.Dropout2d(0.1),
@@ -592,7 +591,7 @@ class PPMBilinearDeepsup(nn.Module):
 
         self.conv_last = nn.Sequential(
             nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
-                      kernel_size=3, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+                      kernel_size=3, padding=1, bias=False),
             SynchronizedBatchNorm2d(512),
             nn.ReLU(inplace=True),
             nn.Dropout2d(0.1),
@@ -647,7 +646,7 @@ class UPerNet(nn.Module):
         for scale in pool_scales:
             self.ppm_pooling.append(nn.AdaptiveAvgPool2d(scale))
             self.ppm_conv.append(nn.Sequential(
-                nn.Conv2d(fc_dim, 512, kernel_size=1,  bias=False),
+                nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(512),
                 nn.ReLU(inplace=True)
             ))
@@ -730,14 +729,14 @@ class Deeplab(nn.Module):
         #aspp
         self.aspp = build_aspp(backbone, 16, BatchNorm)
         #decoder
-        self.conv1 = nn.Conv2d(low_level_inplanes, 48, 1, bias=False, groups=cfg.RESNETS.NUM_GROUPS)
+        self.conv1 = nn.Conv2d(low_level_inplanes, 48, 1, bias=False)
         self.bn1 = BatchNorm(48)
         self.relu = nn.ReLU()
-        self.last_conv = nn.Sequential(nn.Conv2d(304, 256, kernel_size=3, stride=1, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+        self.last_conv = nn.Sequential(nn.Conv2d(304, 256, kernel_size=3, stride=1, padding=1, bias=False),
                                        BatchNorm(256),
                                        nn.ReLU(),
                                        nn.Dropout(0.5),
-                                       nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False, groups=cfg.RESNETS.NUM_GROUPS),
+                                       nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False),
                                        BatchNorm(256),
                                        nn.ReLU(),
                                        nn.Dropout(0.1),
@@ -820,7 +819,7 @@ class CspnUPerNet(nn.Module):
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
         self.cspn_last = nn.Sequential(
-            nn.Conv2d(len(fpn_inplanes) * fpn_dim, 8*cfg.MODEL.NUM_CLASSES, 3, padding=1, groups=cfg.RESNETS.NUM_GROUPS),
+            nn.Conv2d(len(fpn_inplanes) * fpn_dim, 8*cfg.MODEL.NUM_CLASSES, 3, padding=1),
             SynchronizedBatchNorm2d(8*cfg.MODEL.NUM_CLASSES),
         )
         self.cspn_net = Affinity_Propagate()
@@ -969,3 +968,85 @@ class SpnUPerNet(nn.Module):
             return x
 
         return spn_x, x
+
+class GEPPMBilinearDeepsup(nn.Module):
+    def __init__(self, num_class=150, fc_dim=4096,
+                 use_softmax=False, pool_scales=(1, 2, 3, 6)):
+        super(GEPPMBilinearDeepsup, self).__init__()
+        self.use_softmax = use_softmax
+
+        self.ppm = []
+        for scale in pool_scales:
+            self.ppm.append(nn.Sequential(
+                nn.AdaptiveAvgPool2d(scale),
+                nn.Conv2d(fc_dim, 512, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(512),
+                nn.ReLU(inplace=True)
+            ))
+        self.ppm = nn.ModuleList(self.ppm)
+        self.cbr_deepsup = conv3x3_bn_relu(fc_dim // 2, fc_dim // 4, 1)
+
+        self.conv_last = nn.Sequential(
+            nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
+                      kernel_size=3, padding=1, bias=False),
+            SynchronizedBatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(0.1),
+            nn.Conv2d(512, num_class, kernel_size=1)
+        )
+        self.conv_last_deepsup = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
+        self.dropout_deepsup = nn.Dropout2d(0.1)
+
+        height=cfg.SEM.INPUT_SIZE[0]//8
+        width=cfg.SEM.INPUT_SIZE[1]//8
+        #self.attention=nn.Sequential(
+        #    nn.Conv2d(fc_dim+len(pool_scales)*512,fc_dim+len(pool_scales),kernel_size=3,groups=512,stride=1,bias=False),
+        #    SynchronizedBatchNorm2d(fc_dim+len(pool_scales))
+        #)
+        self.gcnh_w=nn.Sequential(
+            nn.Conv2d(fc_dim+len(pool_scales),fc_dim+len(pool_scales),kernel_size=(height,width),groups=512,stride=1,bias=False),
+            nn.Conv2d(fc_dim+len(pool_scales),fc_dim+len(pool_scales),kernel_size=(width,height),groups=512,stride=1,bias=False)
+        )
+        self.gcnw_h=nn.Sequential(
+            nn.Conv2d(fc_dim+len(pool_scales),fc_dim+len(pool_scales),kernel_size=(width,height),groups=512,stride=1,bias=False),
+            nn.Conv2d(fc_dim+len(pool_scales),fc_dim+len(pool_scales),kernel_size=(height,width),groups=512,stride=1,bias=False)
+        )          
+
+
+    def forward(self, conv_out, segSize=None):
+        conv5 = conv_out[-1]
+
+        input_size = conv5.size()
+        ppm_out = [conv5]
+        cross_channel=[]
+        for pool_scale in self.ppm:
+            ppm_out.append(nn.functional.upsample(
+                pool_scale(conv5),
+                (input_size[2], input_size[3]),
+                mode='bilinear', align_corners=False))
+        
+        for i in range(len(ppm_out[0])):
+            block=ppm_out[0][:,i,:,:]
+            for j in range(1,5):
+                block=torch.cat((ppm[j][:,i,:,:],block),dim=1)
+            cross_channel.append(block)
+        ppm_out=torch.cat(cross_channel,dim=1)
+        #x=self.attention(ppm_out)
+        x=self.gcnh_w(ppm_out)+self.gcnh_w(ppm_out)
+        x=x*ppm_out
+        x = self.conv_last(x)
+
+        if self.use_softmax or segSize is not None:  # is True during inference
+            x = nn.functional.upsample(
+                x, size=segSize, mode='bilinear', align_corners=False)
+            x = nn.functional.softmax(x, dim=1)
+            return x
+
+        # deep sup
+        conv4 = conv_out[-2]
+        _ = self.cbr_deepsup(conv4)
+        _ = self.dropout_deepsup(_)
+        _ = self.conv_last_deepsup(_)
+
+
+        return (x, _)

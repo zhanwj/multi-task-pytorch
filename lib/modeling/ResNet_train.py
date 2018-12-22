@@ -55,16 +55,16 @@ class ResNet_convX_body(nn.Module):
         if cfg.SEM.SEM_ON and cfg.SEM.ARCH_ENCODER.endswith('dilated8'):
             self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
                                       dilation=2, stride_init=1)
-        elif not self.is_training:
-            print ('+++++++++++++++++++++call with 8x for ubernet+++++++++++++++++++++')
-            self.res4, dim_in = add_stage_test(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
-                                      dilation=2, stride_init=1)
         else:
             self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
                                       dilation=1, stride_init=2)
+        #else:
+        #    print ('+++++++++++++++++++++call with 8x for ubernet+++++++++++++++++++++')
+        #    self.res4, dim_in = add_stage_test(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
+        #                              dilation=2, stride_init=1)
         if len(block_counts) == 4:
             stride_init = 2 if cfg.RESNETS.RES5_DILATION == 1 else 1
-            self.res5, dim_in = add_stage(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
+            self.res5, dim_in = add_stage_mgrid(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
                                           cfg.RESNETS.RES5_DILATION, stride_init)
             self.spatial_scale = 1 / 32 * cfg.RESNETS.RES5_DILATION
         else:
@@ -83,7 +83,7 @@ class ResNet_convX_body(nn.Module):
             freeze_params(getattr(self, 'res%d' % i))
 
         # Freeze all bn (affine) layers !!!
-        self.apply(lambda m: freeze_params(m) if isinstance(m, mynn.AffineChannel2d) else None)
+        self.apply(lambda m: freeze_params(m) if isinstance(m, mynn.SynchronizedBatchNorm2d) else None)
 
     def detectron_weight_mapping(self):
         if cfg.RESNETS.USE_GN:
@@ -146,7 +146,7 @@ class ResNet_roi_conv5_head(nn.Module):
         #self.detectron_weight_mapping()
     def _init_modules(self):
         # Freeze all bn (affine) layers !!!
-        self.apply(lambda m: freeze_params(m) if isinstance(m, mynn.AffineChannel2d) else None)
+        self.apply(lambda m: freeze_params(m) if isinstance(m, mynn.SynchronizedBatchNorm2d) else None)
 
     def detectron_weight_mapping(self):
         mapping_to_detectron, orphan_in_detectron = \
@@ -170,7 +170,7 @@ class ResNet_roi_conv5_head(nn.Module):
             return x
 
 
-def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
+def add_stage_mgrid(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
     """Make a stage consist of `nblocks` residual blocks.
     Returns:
         - stage module: an nn.Sequentail module of residual blocks
@@ -178,13 +178,21 @@ def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride
     """
     res_blocks = []
     stride = stride_init
-    for _ in range(nblocks):
-        res_blocks.append(add_residual_block(
-            inplanes, outplanes, innerplanes, dilation, stride
-        ))
-        inplanes = outplanes
-        stride = 1
-        dilation = 1
+    if stride != 2:
+        for _ in range(nblocks):
+            res_blocks.append(add_residual_block(
+                inplanes, outplanes, innerplanes, dilation, stride
+            ))
+            inplanes = outplanes
+            stride = 1
+    else:
+        for i in range(nblocks):
+            dilation = cfg.SEM.MULTI_GRID[i]
+            res_blocks.append(add_residual_block(
+                inplanes, outplanes, innerplanes, dilation, stride
+            ))
+            inplanes = outplanes
+            stride = 1
 
     return nn.Sequential(*res_blocks), outplanes
 
@@ -234,7 +242,7 @@ def basic_bn_shortcut(inplanes, outplanes, stride):
                   kernel_size=1,
                   stride=stride,
                   bias=False),
-        mynn.AffineChannel2d(outplanes),
+        mynn.SynchronizedBatchNorm2d(outplanes),
     )
 
 
@@ -257,7 +265,7 @@ def basic_gn_shortcut(inplanes, outplanes, stride):
 def basic_bn_stem():
     return nn.Sequential(OrderedDict([
         ('conv1', nn.Conv2d(3, 64, 7, stride=2, padding=3, bias=False)),
-        ('bn1', mynn.AffineChannel2d(64)),
+        ('bn1', mynn.SynchronizedBatchNorm2d(64)),
         ('relu', nn.ReLU(inplace=True)),
         # ('maxpool', nn.MaxPool2d(kernel_size=3, stride=2, padding=0, ceil_mode=True))]))
         ('maxpool', nn.MaxPool2d(kernel_size=3, stride=2, padding=1))]))
@@ -289,16 +297,16 @@ class bottleneck_transformation(nn.Module):
 
         self.conv1 = nn.Conv2d(
             inplanes, innerplanes, kernel_size=1, stride=str1x1, bias=False)
-        self.bn1 = mynn.AffineChannel2d(innerplanes)
+        self.bn1 = mynn.SynchronizedBatchNorm2d(innerplanes)
 
         self.conv2 = nn.Conv2d(
             innerplanes, innerplanes, kernel_size=3, stride=str3x3, bias=False,
             padding=1 * dilation, dilation=dilation, groups=group)
-        self.bn2 = mynn.AffineChannel2d(innerplanes)
+        self.bn2 = mynn.SynchronizedBatchNorm2d(innerplanes)
 
         self.conv3 = nn.Conv2d(
             innerplanes, outplanes, kernel_size=1, stride=1, bias=False)
-        self.bn3 = mynn.AffineChannel2d(outplanes)
+        self.bn3 = mynn.SynchronizedBatchNorm2d(outplanes)
 
         self.downsample = downsample
         self.relu = nn.ReLU(inplace=True)

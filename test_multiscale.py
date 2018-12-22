@@ -82,6 +82,7 @@ def argument():
     parser.add_argument('--prefix_semseg', dest='prefix_semseg', help='output name of network', default='pred_semseg', type=str)
     parser.add_argument('--prefix_disp', dest='prefix_disp', help='output name of network', default='pred_disp', type=str)
     parser.add_argument('--prefix_average', dest='prefix_average', help='output name of network', default='pred_deepsup', type=str)
+    parser.add_argument('--merge_method', dest='merge_method', help='merge method for MS', default='ave', type=str)
     parser.add_argument('--index_start', dest='index_start', help='predict from index_start', default=0, type=int)
     parser.add_argument('--index_end', dest='index_end', help='predict end with index_end', default=500, type=int)
     parser.add_argument('--save_final_prob', dest='save_final_prob', help='to save prob for each class',  default=0, type=int)
@@ -98,6 +99,7 @@ class TestNet(object):
         cfg.TRAIN.IMS_PER_BATCH = 1
         args.aug_scale=cfg.TRAIN.SCALES
         args.input_size=cfg.SEM.INPUT_SIZE
+        self.input_size=cfg.SEM.INPUT_SIZE
         print ('test scale:',args.aug_scale)
         self._cur = 0
         if args.network == 'Generalized_SEGDISP':
@@ -239,10 +241,15 @@ class TestNet(object):
                 cv2.imwrite(os.path.join(args.save_file,image_name.replace('.png','')) + '.png', pred_disp)
             else:
                 for ic in range(self.num_class): ##
-                    pred_prob[ic] += cv2.resize(scale_pred[0][ic], tuple(self.image_shape[::-1]), interpolation=cv2.INTER_LINEAR)
+                    if args.merge_method == 'ave':
+                        pred_prob[ic] += cv2.resize(scale_pred[0][ic], tuple(self.image_shape[::-1]), interpolation=cv2.INTER_LINEAR)
+                    else:
+                        pred_prob_i=cv2.resize(scale_pred[0][ic], tuple(self.image_shape[::-1]), interpolation=cv2.INTER_LINEAR)
+                        pred_prob[ic] =np.max([pred_prob[ic], pred_prob_i], axis=0)
             os.remove(tmp_name+'_'+str(i)+'_prob.pkl')
         if args.save_final_prob:
-            pred_prob /= num_scale
+            if args.merge_method == 'ave':
+                pred_prob /= num_scale
             write( tmp_name+arg.config.split('/')[-1].split('.')[0]+'_prob.pkl', pred_prob)
         pred_prob = np.argmax(pred_prob, axis=0) #(1024, 2048)
         if image_name.endswith('_disp'):
@@ -297,12 +304,14 @@ def to_test_segdisp(args):
 def to_test_semseg(args):
     test_net = TestNet(args)
     test_net.load_net(args)
+    net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
     for i in range(args.index_start, args.index_end):
         time_now = time.time()
         image, image_name = test_net.load_image(args)
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
-            #net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
-            #scale = round2nearest_multiple(scale, net_stride)
+            scale = round2nearest_multiple(scale, net_stride)
+            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 3000 else [scale//4, scale//2]
+            args.input_size = cfg.SEM.INPUT_SIZE
             #cfg_from_file(args.config)
             pred_list = [] ##预测的数据
             #pred_deepsup_list = []

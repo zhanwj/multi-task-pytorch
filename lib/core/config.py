@@ -445,6 +445,7 @@ __C.SEM.SPN_ITERS = 2
 __C.SEM.SPN_DIM = 32
 __C.SEM.OHEM_ON = False
 __C.SEM.OHEM_POS = 0.9
+__C.SEM.MULTI_GRID = [2,2,2]
 
 
 # ---------------------------------------------------------------------------- #

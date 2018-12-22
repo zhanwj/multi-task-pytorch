@@ -17,7 +17,7 @@ SEM:
     UNION: False
     FC_DIM: 2048
     DIM: 512
-    INPUT_SIZE: [768, 768]
+    INPUT_SIZE: [720, 720]
     TRAINSET: 'train'
     ARCH_ENCODER: 'ResnetX_dilated16'
     DECODER_TYPE: 'upernet'
