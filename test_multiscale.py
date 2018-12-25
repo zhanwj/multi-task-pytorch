@@ -310,7 +310,7 @@ def to_test_semseg(args):
         image, image_name = test_net.load_image(args)
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
             scale = round2nearest_multiple(scale, net_stride)
-            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 3000 else [scale//4, scale//2]
+            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 3500 else [scale//4, scale//2]
             args.input_size = cfg.SEM.INPUT_SIZE
             #cfg_from_file(args.config)
             pred_list = [] ##预测的数据

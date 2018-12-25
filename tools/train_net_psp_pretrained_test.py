@@ -59,9 +59,16 @@ def group_weight(module):
                 group_no_decay.append(m.bias)
         elif isinstance(m, mynn.AffineChannel2d):
             if m.weight is not None:
-                keep_bn += 1
+                if not cfg.SEM.FREEZE_BN:
+                    group_no_decay.append(m.weight)
+                else:
+                    keep_bn += 1
             if m.bias is not None:
-                keep_bn += 1
+                if not cfg.SEM.FREEZE_BN:
+                    group_no_decay.append(m.bias)
+                else:
+                    keep_bn += 1
+		
         elif isinstance(m, nn.modules.conv._ConvNd):
             group_decay.append(m.weight)
             if m.bias is not None:
@@ -78,7 +85,7 @@ def group_weight(module):
                 else:
                     group_no_decay.append(m.bias)
 
-    assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)+keep_bn
+    #assert len(list(module.parameters())) == len(group_decay) + len(group_no_decay)+keep_bn
     groups = [dict(params=group_decay), dict(params=group_no_decay, weight_decay=.0)]
     return groups
 
@@ -396,7 +403,7 @@ def main():
     lr = optimizer.param_groups[0]['lr']  # lr of non-bias parameters, for commmand line outputs.
 
     maskRCNN = mynn.DataParallel(maskRCNN, cpu_keywords=['im_info', 'roidb'], minibatch=True)
-
+	
     ### Training Setups ###
     args.run_name = misc_utils.get_run_name()
     output_dir = misc_utils.get_output_dir(args, args.run_name)

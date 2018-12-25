@@ -64,7 +64,7 @@ class ResNet_convX_body(nn.Module):
         #                              dilation=2, stride_init=1)
         if len(block_counts) == 4:
             stride_init = 2 if cfg.RESNETS.RES5_DILATION == 1 else 1
-            self.res5, dim_in = add_stage(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
+            self.res5, dim_in = add_stage_mgrid(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
                                           cfg.RESNETS.RES5_DILATION, stride_init)
             self.spatial_scale = 1 / 32 * cfg.RESNETS.RES5_DILATION
         else:
@@ -147,6 +147,7 @@ class ResNet_roi_conv5_head(nn.Module):
     def _init_modules(self):
         # Freeze all bn (affine) layers !!!
         self.apply(lambda m: freeze_params(m) if isinstance(m, mynn.AffineChannel2d) else None)
+        #pass
 
     def detectron_weight_mapping(self):
         mapping_to_detectron, orphan_in_detectron = \
@@ -170,7 +171,7 @@ class ResNet_roi_conv5_head(nn.Module):
             return x
 
 
-def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
+def add_stage_mgrid(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
     """Make a stage consist of `nblocks` residual blocks.
     Returns:
         - stage module: an nn.Sequentail module of residual blocks
@@ -178,13 +179,13 @@ def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride
     """
     res_blocks = []
     stride = stride_init
-    for _ in range(nblocks):
+    for i in range(nblocks):
+        dilation = cfg.SEM.MULTI_GRID[i]
         res_blocks.append(add_residual_block(
             inplanes, outplanes, innerplanes, dilation, stride
         ))
         inplanes = outplanes
         stride = 1
-        dilation = 1
 
     return nn.Sequential(*res_blocks), outplanes
 
