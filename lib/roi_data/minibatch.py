@@ -16,6 +16,8 @@ def get_minibatch_blob_names(is_training=True):
         #for idx in range(len(cfg.SEM.DOWNSAMPLE)):
         for idx in range(1):
             blob_names += ['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX, idx)]
+        if cfg.SPN.SPN_ON:
+            blob_names += ['seg_coarse']
     if cfg.DISP.DISP_ON and is_training:
         blob_names += ['data_R']
         #for idx in range(len(cfg.DISP.DOWNSAMPLE)):
@@ -50,6 +52,8 @@ def get_minibatch(roidb):
     if cfg.DISP.DISP_ON:
         blobs['data_R'] = _minibatch_right_image_blob(roidb, im_scales, 'image_R', followed=True)
         valid = roi_data.semseg.add_sem_blobs(blobs, im_scales, roidb, cv2.INTER_LINEAR)
+    if cfg.SPN.SPN_ON:
+        valid  = roi_data.spn.add_sem_blobs(blobs, im_scales, roidb, cv2.INTER_LINEAR)
     if not cfg.SEM.UNION:
         return blobs, valid
 

@@ -33,6 +33,12 @@ import utils.blob as blob_utils
 import utils.fpn as fpn_utils
 import cv2
 from PIL import Image
+import pickle
+
+def load(filename):
+    with open(filename, 'rb') as fp:
+        data=pickle.load(fp)
+    return data
 
 def add_sem_blobs(blobs, im_scales, roidb, interp):
     """Add blobs needed for training Semantic segmentation style models."""
@@ -58,28 +64,18 @@ def _sample_rois(roidb, im_scale, batch_idx, interp):
     """Load a semantic label 
     """
     scale, crop_index = im_scale
-    if interp == cv2.INTER_NEAREST:
-        prefix = cfg.SEM.OUTPUT_PREFIX
-        input_label = 255*np.ones(cfg.SEM.INPUT_SIZE, dtype=np.long)
-        semseg_label = cv2.imread(roidb[prefix], 0)
-        assert np.any(semseg_label != -1), 'semseg error -1'
-    else:
-        prefix = cfg.DISP.OUTPUT_PREFIX
-        input_label = np.zeros(cfg.SEM.INPUT_SIZE, dtype=np.float32)
-        semseg_label = np.asarray(Image.open(roidb[prefix]))/255
+    input_label = np.zeros([cfg.MODEL.NUM_CLASSES]+cfg.SEM.INPUT_SIZE, dtype=np.float32)
+    semseg_label = load(roidb['seg_coarse_path'])
     if roidb['flipped']:
-        semseg_label = semseg_label[:, ::-1]
-    semseg_label = cv2.resize(semseg_label, (scale, scale//2), interpolation=interp)
+        semseg_label = semseg_label[:, :, ::-1]
     y1, x1, h_e, w_e = crop_index
-    input_label[0: h_e, 0: w_e] = semseg_label[y1: y1+ h_e, x1: x1+ w_e]
+    for ic in range(cfg.MODEL.NUM_CLASSES):
+        semseg_label_i = cv2.resize(semseg_label[ic], (scale, scale//2), interpolation=interp)
+        input_label[ic, 0: h_e, 0: w_e] = semseg_label_i[y1: y1+ h_e, x1: x1+ w_e]
     #input_label = input_label.astype(np.float16)
     blob_dict = {}
-    if interp != cv2.INTER_NEAREST:
-        blob_dict['{}_{}'.format(prefix, 0)]= \
-                input_label[np.newaxis, :, :]
-        return blob_dict 
-    # Add label to other loss
-    blob_dict['{}_{}'.format(prefix, 0)] = input_label[np.newaxis].copy()
+    # Add label to  loss
+    blob_dict['seg_coarse'] = input_label[np.newaxis].copy()
 
     return blob_dict
 
