@@ -86,7 +86,66 @@ def conv3x3_bn_relu(in_planes, out_planes, stride=1):
             SynchronizedBatchNorm2d(out_planes),
             nn.ReLU(inplace=True),
             )
+class GCN(nn.Module):
+    def __init__(self, in_planes, out_planes, kernel=23, stride=1, has_bias=False):
+        super(GCN, self).__init__()
+        #self.psp_conv = conv3x3_bn_relu(in_planes, out_planes, 1)
+        #in_planes = out_planes
+        #out_planes = cfg.MODEL.NUM_CLASSES
+        self.gcn23x23_0 = nn.Sequential(
+                nn.Conv2d(in_planes, out_planes, kernel_size=[1,kernel], stride=stride,
+                padding=[1, kernel//2], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                SynchronizedBatchNorm2d(out_planes),
+                nn.ReLU(inplace=True))
 
+        self.gcn23x23_1 = nn.Sequential(
+                nn.Conv2d(in_planes, out_planes, kernel_size=[kernel,1], stride=stride,
+                padding=[kernel//2, 1], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                SynchronizedBatchNorm2d(out_planes),
+                nn.ReLU(inplace=True))
+                
+        self.gcn23x23_2 = nn.Sequential(
+                nn.Conv2d(out_planes, out_planes, kernel_size=[kernel,1], stride=stride,
+                padding=[kernel//2, 1], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                SynchronizedBatchNorm2d(out_planes),
+                nn.ReLU(inplace=True))
+
+        self.gcn23x23_3 = nn.Sequential(
+                nn.Conv2d(out_planes, out_planes, kernel_size=[1,kernel], stride=stride,
+                padding=[1, kernel//2], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                SynchronizedBatchNorm2d(out_planes),
+                nn.ReLU(inplace=True))
+
+        #self.br_side = nn.Sequential(
+        #        nn.Conv2d(out_planes, cfg.MODEL.NUM_CLASSES, 3, padding=1, stride=1), 
+        #        SynchronizedBatchNorm2d(cfg.MODEL.NUM_CLASSES),
+        #        nn.ReLU(inplace=True),
+        #        nn.Conv2d(cfg.MODEL.NUM_CLASSES, cfg.MODEL.NUM_CLASSES, 3, padding=1, stride=1))
+        #self.conv_last = nn.Conv2d(out_planes, cfg.MODEL.NUM_CLASSES, 1, padding=0, stride=1)
+
+        self.apply(self.weights_init)
+
+    def weights_init(self, m):
+        # custom weights initialization
+        classname = m.__class__.__name__
+        if classname.find('Conv') != -1:
+            nn.init.kaiming_normal_(m.weight.data)
+        elif classname.find('BatchNorm') != -1:
+            m.weight.data.fill_(1.)
+            m.bias.data.fill_(1e-4)
+
+    def forward(self, x):
+        #x = self.psp_conv(x)
+        out0 = self.gcn23x23_0(x)
+        out2 = self.gcn23x23_2(out0)
+
+        out1 = self.gcn23x23_1(x)
+        out3 = self.gcn23x23_3(out1)
+        
+        out = out2 + out3
+        #out_br = self.br_side(out)
+        #out = self.conv_last(out)
+        return out
 
 class ModelBuilder():
     # custom weights initialization
@@ -667,15 +726,20 @@ class UPerNet(nn.Module):
 
         self.fpn_out = []
         for i in range(len(fpn_inplanes) - 1): # skip the top layer
-            self.fpn_out.append(nn.Sequential(
-                conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
-            ))
+            if not cfg.SEM.GCN_ON:
+                self.fpn_out.append(nn.Sequential(
+                    conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
+                ))
+            else:
+                self.fpn_out.append(nn.Sequential(
+                    GCN(fpn_dim, fpn_dim, kernel=15)
+                ))
         self.fpn_out = nn.ModuleList(self.fpn_out)
-
         self.conv_last = nn.Sequential(
             conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
             nn.Conv2d(fpn_dim, num_class, kernel_size=1)
         )
+        #self.conv_last = GCN(len(fpn_inplanes) * fpn_dim, fpn_dim)
 
     def forward(self, conv_out, segSize=None):
         if (len(conv_out)>4):

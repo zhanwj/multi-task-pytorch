@@ -79,14 +79,14 @@ class FCN8s(nn.Module):
 
         dims = [512, 512, 512, 256, 128]
         self.decoder_conv = []
-        for i in range(4):
+        for i in range(3):
            self.decoder_conv.append(nn.Sequential(
                nn.Conv2d(dims[i], dims[i+1], 3, padding=1),
                nn.ReLU(inplace=True)))
         self.decoder_conv = nn.ModuleList(self.decoder_conv)
 
         #self.out2 = nn.Conv2d(dims[-1], 8, 3, padding=1)
-        self.out2 = nn.Conv2d(dims[-1], 8*cfg.SEM.SPN_DIM, 3, padding=1)
+        self.out2 = nn.Conv2d(dims[-1], 384, 3, padding=1)
 
         self._initialize_weights()
 
@@ -97,6 +97,9 @@ class FCN8s(nn.Module):
                 if m.bias is not None:
                     constant_(m.bias,0)
             if isinstance(m,nn.BatchNorm2d):
+                constant_(m.weight,1)
+                constant_(m.bias,0)
+            if isinstance(m,nn.SynchronizedBatchNorm2d):
                 constant_(m.weight,1)
                 constant_(m.bias,0)
             if isinstance(m, nn.ConvTranspose2d):
@@ -114,7 +117,6 @@ class FCN8s(nn.Module):
 
         h = self.relu2_1(self.conv2_1(h))
         h = self.relu2_2(self.conv2_2(h))
-        conv_out.append(h)
         h = self.pool2(h)
 
         h = self.relu3_1(self.conv3_1(h))
@@ -137,6 +139,7 @@ class FCN8s(nn.Module):
 
         out1 = self.out1(h)
         conv_out.reverse() # [P2 - P5]
+        dims = [512, 512, 512, 256, 128]
         for i in range(len(conv_out)):
             out1=nn.functional.interpolate(out1,size=conv_out[i].size()[2:],mode='bilinear', align_corners=False)
             out1 = self.decoder_conv[i](out1)

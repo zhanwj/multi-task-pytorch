@@ -29,6 +29,7 @@ from modeling.model_builder_3DSD import Generalized_3DSD
 from modeling.model_builder_segdisp import Generalized_SEGDISP
 from modeling.model_builder_semseg_bat import Generalized_SEMSEG
 from modeling.model_builder_segcspn import Generalized_SEGCSPN
+from modeling.model_builder_spn import Generalized_SPN
 from roi_data.loader import RoiDataLoader, MinibatchSampler, collate_minibatch, collate_minibatch_semseg
 from utils.detectron_weight_helper import load_detectron_weight
 from utils.logging import log_stats
@@ -492,8 +493,8 @@ def main():
             if cfg.SOLVER.TYPE == 'SGD' and cfg.SOLVER.LR_POLICY == 'ReduceLROnPlateau':
                     lr_scheduler.step(loss)
                     lr = optimizer.param_groups[0]['lr']
-            
-            net_utils.save_ckpt(output_dir, args, maskRCNN, optimizer)
+            if args.epoch !=0 and args.epoch % args.ckpt_num_per_epoch ==0:
+                net_utils.save_ckpt(output_dir, args, maskRCNN, optimizer)
             # reset starting iter number after first epoch
             args.start_iter = 0
 
@@ -501,7 +502,9 @@ def main():
         #if iters_per_epoch % args.disp_interval != 0:
             # log last stats at the end
         #    log_training_stats(training_stats, global_step, lr)
-
+        # save final model
+        if args.epoch % args.ckpt_num_per_epoch:
+            net_utils.save_ckpt(output_dir, args, maskRCNN, optimizer)
     except (RuntimeError, KeyboardInterrupt):
         logger.info('Save ckpt on exception ...')
         net_utils.save_ckpt(output_dir, args, maskRCNN, optimizer)

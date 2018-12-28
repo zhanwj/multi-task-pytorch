@@ -385,6 +385,14 @@ __C.TEST.BBOX_VOTE.SCORING_METHOD = 'ID'
 # different methods)
 __C.TEST.BBOX_VOTE.SCORING_METHOD_BETA = 1.0
 
+# ---------------------------------------------------------------------------- #
+# Model options
+# ---------------------------------------------------------------------------- #
+__C.SPN = AttrDict()
+__C.SPN.SPN_ON=False
+__C.SPN.SAVE_FILE=''
+__C.SPN.SPN_ITERS = 2
+__C.SPN.DIM = 32
 
 # ---------------------------------------------------------------------------- #
 # Model options
@@ -416,10 +424,17 @@ __C.SEM.SPN_CROPSIZE = [320, 320]
 __C.SEM.SPN_DIM = 32
 __C.SEM.FREEZE_BN = False
 __C.SEM.SHUFFLE = True
-
-
+#spn
+__C.SEM.SPN_CONNECTION_WAYS = 3 
+__C.SEM.SPN_ITERS = 2
+__C.SEM.SPN_DIM = 32
+__C.SEM.OHEM_ON = False
+__C.SEM.OHEM_POS = 0.9
+__C.SEM.MULTI_GRID = [2,2,2]
 __C.SEM.USE_GE_BLOCK=False
 __C.SEM.USE_AWM_BLOCK=False
+#gcn
+__C.SEM.GCN_ON=False
 # ---------------------------------------------------------------------------- #
 # Model options
 # ---------------------------------------------------------------------------- #
@@ -440,12 +455,6 @@ __C.DISP.DISPSEG_REQUIRES_GRAD = True
 __C.DISP.EXPECT_MAXDISP = 127
 __C.DISP.COST_VOLUME_TYPE = 'CorrelationLayer1D'
 __C.DISP.MERGE_ASPP = True
-__C.SEM.SPN_CONNECTION_WAYS = 3 
-__C.SEM.SPN_ITERS = 2
-__C.SEM.SPN_DIM = 32
-__C.SEM.OHEM_ON = False
-__C.SEM.OHEM_POS = 0.9
-__C.SEM.MULTI_GRID = [2,2,2]
 
 
 # ---------------------------------------------------------------------------- #

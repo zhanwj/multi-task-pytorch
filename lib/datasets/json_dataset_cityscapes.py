@@ -142,7 +142,7 @@ class JsonDataset(object):
 
         if cfg.SPN.SPN_ON:
             im_path = os.path.join(
-                cfg.SPN.SAVE_FILE, image_L.replace('.png', '_prob.pkl')
+                cfg.SPN.SAVE_FILE, image_L.split('/')[-1].replace('.png', '_prob.pkl')
             )
             assert os.path.exists(im_path), 'Coarse Image \'{}\' not found'.format(im_path)
             entry['seg_coarse_path'] = im_path
