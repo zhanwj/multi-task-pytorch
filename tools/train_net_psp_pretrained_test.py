@@ -333,8 +333,16 @@ def main():
         state_dict={}
         pretrained=torch.load(cfg.SEM.PSPNET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
         pretrained = pretrained['model']
-        maskRCNN.load_state_dict(pretrained,strict=False)
+        if cfg.SEM.SPN_ON:
+            maskRCNN.pspnet.load_state_dict(pretrained,strict=True)
+        else:
+            maskRCNN.load_state_dict(pretrained,strict=False)
         print("weights load success")
+
+    if cfg.SEM.SPN_ON:
+        maskRCNN.pspnet.eval()
+        for p in maskRCNN.pspnet.parameters():
+            p.requires_grad = False
 
     if cfg.CUDA:
         maskRCNN.to('cuda')
@@ -493,7 +501,7 @@ def main():
             if cfg.SOLVER.TYPE == 'SGD' and cfg.SOLVER.LR_POLICY == 'ReduceLROnPlateau':
                     lr_scheduler.step(loss)
                     lr = optimizer.param_groups[0]['lr']
-            if args.epoch !=0 and args.epoch % args.ckpt_num_per_epoch ==0:
+            if (args.epoch+1) % args.ckpt_num_per_epoch ==0:
                 net_utils.save_ckpt(output_dir, args, maskRCNN, optimizer)
             # reset starting iter number after first epoch
             args.start_iter = 0
@@ -503,7 +511,7 @@ def main():
             # log last stats at the end
         #    log_training_stats(training_stats, global_step, lr)
         # save final model
-        if args.epoch % args.ckpt_num_per_epoch:
+        if (args.epoch+1) % args.ckpt_num_per_epoch:
             net_utils.save_ckpt(output_dir, args, maskRCNN, optimizer)
     except (RuntimeError, KeyboardInterrupt):
         logger.info('Save ckpt on exception ...')

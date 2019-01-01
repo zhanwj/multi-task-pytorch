@@ -68,6 +68,9 @@ def _sample_rois(roidb, im_scale, batch_idx, interp):
     semseg_label = load(roidb['seg_coarse_path'])
     if roidb['flipped']:
         semseg_label = semseg_label[:, :, ::-1]
+    semseg_label = semseg_label.astype(np.float32)
+    if np.all(semseg_label<=0.5):
+        semseg_label *= 2
     y1, x1, h_e, w_e = crop_index
     for ic in range(cfg.MODEL.NUM_CLASSES):
         semseg_label_i = cv2.resize(semseg_label[ic], (scale, scale//2), interpolation=interp)

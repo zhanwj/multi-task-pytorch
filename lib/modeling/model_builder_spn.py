@@ -21,7 +21,7 @@ import utils.blob as blob_utils
 import utils.net as net_utils
 import utils.resnet_weights_helper as resnet_utils
 import modeling.fcn8s as fcn 
-import modeling.spn_bat as spn
+import modeling.spn_online as spn
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,30 @@ class SegmentationModuleBase(nn.Module):
         acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
         return acc
 
+class Generalized_SEMSEG(SegmentationModuleBase):
+    def __init__(self):
+        super(SegmentationModuleBase, self).__init__()
+
+        # For cache
+        self.mapping_to_detectron = None
+        self.orphans_in_detectron = None
+
+        #define encoder 
+        builder = semseg_heads.ModelBuilder()
+        self.encoder = builder.build_encoder(
+            arch=cfg.SEM.ARCH_ENCODER,
+            fc_dim=cfg.SEM.FC_DIM)
+
+        #define semseg heads
+        self.decoder = builder.build_decoder(
+                arch=cfg.SEM.DECODER_TYPE,
+                fc_dim=cfg.SEM.FC_DIM,
+                num_class=cfg.MODEL.NUM_CLASSES,
+                use_softmax=not self.training,
+                weights='')
+    def forward(self, data, **feed_dict):
+        pred = self.decoder(self.encoder(data, return_feature_maps=True), segSize=cfg.SEM.INPUT_SIZE)
+        return pred
 
 class Generalized_SPN(SegmentationModuleBase):
     def __init__(self):
@@ -93,16 +117,14 @@ class Generalized_SPN(SegmentationModuleBase):
         self.mapping_to_detectron = None
         self.orphans_in_detectron = None
         
-
+        self.pspnet = Generalized_SEMSEG()
         self.spn_guidance = fcn.FCN8s()
         self.spn_net =spn.SPN()
         self.crit = nn.NLLLoss(ignore_index=255)
-
         if not cfg.SEM.OHEM_ON:
             self.loss_semseg = self.loss_norm
         else:
             self.loss_semseg = self.loss_ohem
-
 
     def freeze_bn(self):
         for m in self.modules():
@@ -153,7 +175,8 @@ class Generalized_SPN(SegmentationModuleBase):
             return_dict['losses'] = {}
             return_dict['metrics'] = {}
             guidance = self.spn_guidance(data)
-            pred_semseg = self.spn_net(feed_dict['seg_coarse'], guidance)
+            seg_coarse = self.pspnet(data)
+            pred_semseg = self.spn_net(seg_coarse, guidance)
             loss, acc = self.loss_semseg(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
             return_dict['losses']['loss_semseg'] = loss
             return_dict['metrics']['accuracy_pixel'] = acc
@@ -163,7 +186,8 @@ class Generalized_SPN(SegmentationModuleBase):
             for k, v in return_dict['metrics'].items():
                 return_dict['metrics'][k] = v.unsqueeze(0)
         else: # inference
-            pred = self.spn_net(feed_dict['seg_coarse'], self.spn_guidance(data))
+            pred_semseg = self.spn_net(seg_coarse, guidance)
+            pred = self.spn_net(seg_coarse, self.spn_guidance(data))
             #pred = nn.functional.interpolate(pred, size=cfg.SEM.INPUT_SIZE,mode='bilinear',align_corners=False)
             pred = F.softmax(pred, dim=1)
             return_dict['pred_semseg']=pred

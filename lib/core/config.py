@@ -433,6 +433,7 @@ __C.SEM.OHEM_POS = 0.9
 __C.SEM.MULTI_GRID = [2,2,2]
 __C.SEM.USE_GE_BLOCK=False
 __C.SEM.USE_AWM_BLOCK=False
+__C.SEM.FCN_WEIGHTS=''
 #gcn
 __C.SEM.GCN_ON=False
 # ---------------------------------------------------------------------------- #

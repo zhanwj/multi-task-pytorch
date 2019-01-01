@@ -5,6 +5,7 @@ from core.config import cfg
 from . import resnet, resnext,senet
 import modeling.ResNet as ResNet
 import modeling.ResNet_train as ResNet_train
+import modeling.deform_conv as deform_conv
 from lib.nn import SynchronizedBatchNorm2d
 import math
 from modeling.backbone import build_backbone

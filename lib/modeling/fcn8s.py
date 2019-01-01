@@ -5,6 +5,20 @@ import numpy as np
 import torch.nn as nn
 from torch.nn.init import kaiming_normal_,constant_
 from lib.nn import SynchronizedBatchNorm2d
+import os
+import sys
+try:
+    from urllib import urlretrieve
+except ImportError:
+    from urllib.request import urlretrieve
+def load_url(map_location=None):
+    #filename = url.split('/')[-1]
+    cached_file = cfg.SEM.FCN_WEIGHTS
+    if not os.path.exists(cached_file):
+        url='http://drive.google.com/uc?id=0B9P1L--7Wd2vT0FtdThWREhjNkU'
+        sys.stderr.write('Downloading: "{}" to {}\n'.format(url, cached_file))
+        urlretrieve(url, cached_file)
+    return torch.load(cached_file, map_location=map_location)
 def get_upsampling_weight(in_channels, out_channels, kernel_size):
     """Make a 2D bilinear kernel suitable for upsampling"""
     factor = (kernel_size + 1) // 2
@@ -21,7 +35,12 @@ def get_upsampling_weight(in_channels, out_channels, kernel_size):
     return torch.from_numpy(weight).float()
 
 class FCN8s(nn.Module):
-
+    #def download():
+    #    return fcn.data.cached_download(
+    #                url='http://drive.google.com/uc?id=0B9P1L--7Wd2vT0FtdThWREhjNkU',
+    #                path=(cfg.RESNETS.IMAGENET_PRETRAINED_WEIGHTS,
+    #                md5='dbd9bbb3829a3184913bccc74373afbb',
+    #            )
     def __init__(self, n_class=cfg.MODEL.NUM_CLASSES):
         super(FCN8s, self).__init__()
         # conv1
@@ -77,18 +96,21 @@ class FCN8s(nn.Module):
         #       )
         #self.encode_reduces = nn.ModuleList(self.encode_reduces)
 
-        dims = [512, 512, 512, 256, 128]
+        dims = [512, 512, 512, 256]
         self.decoder_conv = []
         for i in range(3):
            self.decoder_conv.append(nn.Sequential(
                nn.Conv2d(dims[i], dims[i+1], 3, padding=1),
                nn.ReLU(inplace=True)))
         self.decoder_conv = nn.ModuleList(self.decoder_conv)
+        
+        print ('loading pretrained model for vgg')
+        self.load_state_dict(load_url(), strict=False)
+        #pretrained=torch.load(cfg.RESNETS.IMAGENET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
+        #self.load_state_dict(pretrained,strict=True)
+        print ('loading pretrained model for vgg is done')
 
-        #self.out2 = nn.Conv2d(dims[-1], 8, 3, padding=1)
-        self.out2 = nn.Conv2d(dims[-1], 384, 3, padding=1)
-
-        self._initialize_weights()
+    
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -99,7 +121,7 @@ class FCN8s(nn.Module):
             if isinstance(m,nn.BatchNorm2d):
                 constant_(m.weight,1)
                 constant_(m.bias,0)
-            if isinstance(m,nn.SynchronizedBatchNorm2d):
+            if isinstance(m,SynchronizedBatchNorm2d):
                 constant_(m.weight,1)
                 constant_(m.bias,0)
             if isinstance(m, nn.ConvTranspose2d):
@@ -145,8 +167,8 @@ class FCN8s(nn.Module):
             out1 = self.decoder_conv[i](out1)
             out1 = out1 + conv_out[i]
         out1 = nn.functional.interpolate(out1,scale_factor=2,mode='bilinear', align_corners=False)
-        out2 = self.out2(out1)
-        return out2
+        #out2 = self.out2(out1)
+        return out1
 
     def copy_params_from_fcn16s(self, fcn16s):
         for name, l1 in fcn16s.named_children():

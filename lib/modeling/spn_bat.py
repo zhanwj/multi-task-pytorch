@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn.init import kaiming_normal_,constant_
-from modeling.pytorch_spn.functions.gaterecurrent2dnoind import GateRecurrent2dnoindFunction as  GateRecurrent2dnoind
+from modeling.pytorch_spn.modules.gaterecurrent2dnoind import GateRecurrent2dnoind
 from lib.nn import SynchronizedBatchNorm2d
 
 class SPN(nn.Module):
@@ -20,7 +20,7 @@ class SPN(nn.Module):
         self.guide_conv1=nn.Sequential(
                 nn.Conv2d(cfg.MODEL.NUM_CLASSES, cfg.SPN.DIM, kernel_size=4,padding=1,stride=2,bias=False))
         self.guide_conv2=nn.Sequential(
-                nn.Conv2d(256,cfg.SEM.SPN_DIM*12,kernel_size=3,padding=1,stride=1,bias=False))
+                nn.Conv2d(256,cfg.SPN.DIM*12,kernel_size=3,padding=1,stride=1,bias=False))
         self.elt_resize_deconv=nn.Sequential(                      #1/2
             nn.Conv2d(cfg.SPN.DIM, cfg.SPN.DIM*2, 3, padding=1, stride=1, bias=False),
             nn.ReLU(inplace=True),
@@ -71,8 +71,8 @@ class SPN(nn.Module):
         output_up_to_bottom =self.up_to_bottom(featureMap,G_up_to_bottom[0], G_up_to_bottom[1], G_up_to_bottom[2])
         output_max=torch.max(torch.max(torch.max(output_left_to_right,output_right_to_left),output_up_to_bottom),output_bottom_to_up)
         
-        if cfg.SEM.SPN_ITERS>1:
-            for i in range(cfg.SEM.SPN_ITERS-1):
+        if cfg.SPN.SPN_ITERS>1:
+            for i in range(cfg.SPN.SPN_ITERS-1):
                 output_left_to_right=self.left_to_right(output_max,G_left_to_right[0],G_left_to_right[1],G_left_to_right[2])
                 output_right_to_left=self.right_to_left(output_max,G_right_to_left[0],G_right_to_left[1],G_right_to_left[2])
                 output_bottom_to_up =self.bottom_to_up (output_max,G_bottom_to_up[0], G_bottom_to_up[1], G_bottom_to_up[2])
