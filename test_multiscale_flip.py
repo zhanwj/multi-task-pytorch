@@ -229,14 +229,16 @@ class TestNet(object):
             pred_smooth[:, :, sh:eh, sw:ew] += 1
         assert np.all(pred_smooth >=1), 'error merge'
         pred_prob /= pred_smooth
-        write( tmp_name+'_'+str(scale_i)+'_prob.pkl', pred_prob)
+        return pred_prob
+        #write( tmp_name+'_'+str(scale_i)+'_prob.pkl', pred_prob)
 
-    def save_multi_results(self, image_name, args): #多尺寸
+    def save_multi_results(self, pred_scales_list, image_name, args): #多尺寸
         num_scale = len(self.aug_scale)
         pred_prob = np.zeros([self.num_class]+self.image_shape)#(19, 1024, 2048)
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
         for i, scale in enumerate(self.aug_scale):
-            scale_pred = load(tmp_name+'_'+str(i)+'_prob.pkl')#(1, 19, 90, 180)
+            #scale_pred = load(tmp_name+'_'+str(i)+'_prob.pkl')#(1, 19, 90, 180)
+            scale_pred = pred_scales_list[i] #(1, 19, 90, 180)
             assert scale_pred.shape[0]==1, 'only support one sample'
             #pred_prob += self.up_sample(torch.from_numpy(scale_pred))[0].numpy()
             if image_name.endswith('_disp'):
@@ -249,18 +251,15 @@ class TestNet(object):
                     else:
                         pred_prob_i=cv2.resize(scale_pred[0][ic], tuple(self.image_shape[::-1]), interpolation=cv2.INTER_LINEAR)
                         pred_prob[ic] =np.max([pred_prob[ic], pred_prob_i], axis=0)
-            os.remove(tmp_name+'_'+str(i)+'_prob.pkl')
-        if args.save_final_prob:
+            #os.remove(tmp_name+'_'+str(i)+'_prob.pkl')
+        if  args.save_final_prob:
             if args.merge_method == 'ave':
                 pred_prob /= num_scale
             assert np.all(pred_prob <= 1), 'error scale'
             write(tmp_name+'_prob.pkl', pred_prob.astype(np.float16))
         else:
             pred_prob = np.argmax(pred_prob, axis=0) #(1024, 2048)
-            if image_name.endswith('_disp'):
-                pass
-            elif not args.save_final_prob:
-                self.transfer_label(image_name, pred_prob)
+            self.transfer_label(image_name, pred_prob)
 
     def transfer_label(self, image_name, pred_prob): #图片可视化： 灰度图-》彩色图
         tmp_name = os.path.join(args.save_file,image_name.replace('.png',''))
@@ -313,6 +312,7 @@ def to_test_semseg(args):
     for i in range(args.index_start, args.index_end):
         time_now = time.time()
         image, image_name = test_net.load_image(args)
+        pred_final_list = []
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
             scale = round2nearest_multiple(scale, net_stride)
             cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 4000 else [scale//4, scale//2]
@@ -331,11 +331,12 @@ def to_test_semseg(args):
                         input_data = Variable(torch.from_numpy(im_flip[np.newaxis,:]).float(), requires_grad=False).cuda()
                         pred_dict += test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()[:, :, :, ::-1]
                 pred_list.append(pred_dict/2)
-            test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args) #之后将图片合起来
+            pred_final_list.append(test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args))
             del pred_list
             del one_list
             #test_net.save_pred(pred_deepsup_list, image_name + '_average', [scale, scale_i], index, args)
-        test_net.save_multi_results(image_name,  args)
+        test_net.save_multi_results(pred_final_list, image_name,  args)
+        del pred_final_list
         #test_net.save_multi_results(image_name + '_average',  args)
         cost_time = time.time() - time_now
         print ('{} cost {}s , remain time:{}s '.format(image_name, cost_time, (args.index_end - i - 1)*cost_time))
