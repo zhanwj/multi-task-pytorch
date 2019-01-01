@@ -47,7 +47,8 @@ logger = logging.getLogger(__name__)
 # RuntimeError: received 0 items of ancdata. Issue: pytorch/pytorch#973
 rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
-
+#define start for poly
+poly_iter=0
 
 def group_weight(module):
     group_decay = []
@@ -108,6 +109,23 @@ def adjust_learning_rate(optimizers, cur_iter, args):
         param_group['lr'] = args.running_lr_decoder
     return args.running_lr_decoder
 
+def step_adjust_learning_rate(optimizers, lr, cur_iter, args):
+    if args.lr_decay_epochs:
+        if args.epoch == args.lr_decay_epochs[0] and args.start_iter == 0:
+            args.lr_decay_epochs.pop(0)
+            lr *= cfg.SOLVER.GAMMA
+            for param_group in optimizer_decoder.param_groups:
+                param_group['lr'] = lr
+        global poly_iter
+        poly_iter = cur_iter
+        return lr
+    else:
+        scale_running_lr = ((1. - float(cur_iter-poly_iter) / (args.max_iters-poly_iter)) ** cfg.SOLVER.POLY_POWER)
+        args.running_lr_decoder = cfg.SOLVER.BASE_LR * scale_running_lr
+        optimizer_decoder = optimizers
+        for param_group in optimizer_decoder.param_groups:
+            param_group['lr'] = args.running_lr_decoder
+        return args.running_lr_decoder
 
 
 def parse_args():
@@ -375,7 +393,7 @@ def main():
         print("Using ReduceLROnPlateau as Lr reduce policy!")
     elif cfg.SOLVER.TYPE == "Adam":
         optimizer = torch.optim.Adam(params)
-    elif cfg.SOLVER.TYPE == "poly":
+    elif "poly" in cfg.SOLVER.TYPE:
         optimizer = create_optimizers(maskRCNN,args)
         print("Using Poly as Lr reduce policy!")
 
@@ -408,8 +426,12 @@ def main():
     if args.load_detectron:  #TODO resume for detectron weights (load sgd momentum values)
         logging.info("loading Detectron weights %s", args.load_detectron)
         load_detectron_weight(maskRCNN, args.load_detectron)
+    
+    if cfg.SOLVER.TYPE=='step_poly':
+        lr  = cfg.SOLVER.BASE_LR / (cfg.SOLVER.GAMMA**len(args.lr_decay_epochs))
+    else:
+        lr = optimizer.param_groups[0]['lr']  # lr of non-bias parameters, for commmand line outputs.
 
-    lr = optimizer.param_groups[0]['lr']  # lr of non-bias parameters, for commmand line outputs.
 
     maskRCNN = mynn.DataParallel(maskRCNN, cpu_keywords=['im_info', 'roidb'], minibatch=True)
 	
@@ -486,6 +508,8 @@ def main():
                 if cfg.SOLVER.TYPE=='poly':
                     lr = adjust_learning_rate(optimizer, global_step, args)
                 
+                if cfg.SOLVER.TYPE=='step_poly':
+                    lr = step_adjust_learning_rate(optimizer, lr, global_step, args)
                 
                 training_stats.IterToc()
 

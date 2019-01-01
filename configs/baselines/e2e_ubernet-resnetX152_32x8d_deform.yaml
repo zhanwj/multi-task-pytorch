@@ -35,11 +35,11 @@ SOLVER:
   WEIGHT_DECAY: 0.0001
   #TYPE: 'SGD'
   #LR_POLICY: 'ReduceLROnPlateau'
-  TYPE: 'poly'
+  TYPE: 'step_poly'
   LR_POLICY: 'Poly'
   #LR_POLICY: steps_with_decay
   BASE_LR: 0.007
-  GAMMA: 0.1
+  GAMMA: 2.0
   MAX_ITER: 180000
   STEPS: [0, 120000, 160000]
 FPN:
