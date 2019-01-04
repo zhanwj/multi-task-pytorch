@@ -78,8 +78,8 @@ class SegmentationModule(SegmentationModuleBase):
 def conv3x3(in_planes, out_planes, stride=1, has_bias=False):
     "3x3 convolution with padding"
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS)
-
+            padding=1, bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS)
+            #padding=1, bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS if cfg.SEM.DECODER_TYPE != 'deeplab' else 1)
 
 def conv3x3_bn_relu(in_planes, out_planes, stride=1):
     return nn.Sequential(
@@ -95,25 +95,25 @@ class GCN(nn.Module):
         #out_planes = cfg.MODEL.NUM_CLASSES
         self.gcn23x23_0 = nn.Sequential(
                 nn.Conv2d(in_planes, out_planes, kernel_size=[1,kernel], stride=stride,
-                padding=[1, kernel//2], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                padding=[0, kernel//2], dilation=(1,1), bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
                 SynchronizedBatchNorm2d(out_planes),
                 nn.ReLU(inplace=True))
 
         self.gcn23x23_1 = nn.Sequential(
                 nn.Conv2d(in_planes, out_planes, kernel_size=[kernel,1], stride=stride,
-                padding=[kernel//2, 1], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                padding=[kernel//2, 0], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
                 SynchronizedBatchNorm2d(out_planes),
                 nn.ReLU(inplace=True))
                 
         self.gcn23x23_2 = nn.Sequential(
                 nn.Conv2d(out_planes, out_planes, kernel_size=[kernel,1], stride=stride,
-                padding=[kernel//2, 1], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                padding=[kernel//2, 0], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
                 SynchronizedBatchNorm2d(out_planes),
                 nn.ReLU(inplace=True))
 
         self.gcn23x23_3 = nn.Sequential(
                 nn.Conv2d(out_planes, out_planes, kernel_size=[1,kernel], stride=stride,
-                padding=[1, kernel//2], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
+                padding=[0, kernel//2], bias=has_bias, groups=cfg.RESNETS.NUM_GROUPS),
                 SynchronizedBatchNorm2d(out_planes),
                 nn.ReLU(inplace=True))
 
@@ -353,8 +353,13 @@ class ModelBuilder():
                 use_softmax=use_softmax,
                 fpn_dim=512)
         elif arch == 'deeplab':
-            net_decoder = Deeplab(
-                low_level_inplanes=512)
+            net_decoder = DeepLabNet(
+                num_class=num_class,
+                fc_dim=fc_dim,
+                use_softmax=use_softmax,
+                fpn_dim=256,
+                fpn_inplanes=(256,2048),
+                pool_scales=(1,6,12,18) if '16' in cfg.SEM.ARCH_ENCODER else (1, 12, 24, 36))
         else:
             raise Exception('Architecture undefined!')
 
@@ -692,6 +697,7 @@ class PPMBilinearDeepsup(nn.Module):
         return (x, _)
 
 
+
 # upernet
 class UPerNet(nn.Module):
     def __init__(self, num_class=150, fc_dim=4096,
@@ -788,12 +794,99 @@ class UPerNet(nn.Module):
         return x
 
 
+# deeplab
+class DeepLabNet(nn.Module):
+    def __init__(self, num_class=150, fc_dim=4096,
+                 use_softmax=False, pool_scales=(1, 6, 12, 18),
+                 fpn_inplanes=(256,2048), fpn_dim=256, low_dim=32):
+        super(DeepLabNet, self).__init__()
+        self.use_softmax = use_softmax
+        # PPM Module
+        self.ppm_pooling = []
+        self.ppm_conv = []
+        #add global pooling
+        if cfg.SEM.USE_GP:
+            self.ppm_pooling.append(nn.AdaptiveAvgPool2d(1))
+            self.ppm_conv.append(nn.Sequential(
+                nn.Conv2d(fc_dim, 256, kernel_size=1,  bias=False),
+                SynchronizedBatchNorm2d(256),
+                nn.ReLU(inplace=True)
+            ))
+        #add dilation conv
+        for ids, scale in enumerate(pool_scales):
+            if ids == 0:
+                self.ppm_conv.append(nn.Sequential(
+                    nn.Conv2d(fc_dim, 256, kernel_size=1,  groups=cfg.RESNETS.NUM_GROUPS, bias=False),
+                    SynchronizedBatchNorm2d(256),
+                    nn.ReLU(inplace=True)
+                ))
+            else:
+                self.ppm_conv.append(nn.Sequential(
+                    nn.Conv2d(fc_dim, 256, kernel_size=3, dilation=scale, padding=scale, groups=cfg.RESNETS.NUM_GROUPS, bias=False),
+                    SynchronizedBatchNorm2d(256),
+                    nn.ReLU(inplace=True)
+                ))
+        if cfg.SEM.GCN_ON:
+            self.ppm_conv.append(nn.Sequential(
+                GCN(fc_dim//2, 256, kernel=25),
+                GCN(256, 256, kernel=25)))
+        self.ppm_conv = nn.ModuleList(self.ppm_conv)
+        self.ppm_pooling = nn.ModuleList(self.ppm_pooling)
+        self.ppm_last_conv = nn.Sequential(
+                conv3x3_bn_relu((len(pool_scales)+cfg.SEM.USE_GP+int(cfg.SEM.GCN_ON))*256, fpn_dim, 1),
+                nn.Dropout(0.9))
+
+        # FPN Module
+        self.fpn_in = nn.Sequential(
+                nn.Conv2d(fpn_inplanes[0], low_dim, kernel_size=1, bias=False),
+                SynchronizedBatchNorm2d(low_dim),
+                nn.ReLU(inplace=True)
+            )
+        self.fpn_out = conv3x3_bn_relu(low_dim+fpn_dim, fpn_dim, 1)
+        self.conv_last = nn.Sequential(
+            conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
+            nn.Conv2d(fpn_dim, num_class, kernel_size=1)
+        )
+
+    def forward(self, conv_out, segSize=None):
+        conv5 = conv_out[-1]
+
+        input_size = conv5.size()
+        ppm_out = []
+        #global pooling
+        if cfg.SEM.USE_GP:
+            ppm_out.append(self.ppm_conv[0](nn.functional.upsample(
+                self.ppm_pooling[0](conv5),
+                (input_size[2], input_size[3]),
+                mode='bilinear', align_corners=False)))
+        #dilation conv
+        for  pool_conv in self.ppm_conv[cfg.SEM.USE_GP: cfg.SEM.USE_GP+4]:
+            ppm_out.append(pool_conv(conv5))
+        if cfg.SEM.GCN_ON:
+            ppm_out.append(self.ppm_conv[-1](conv_out[-2]))
+        ppm_out = torch.cat(ppm_out, 1)
+        f = self.ppm_last_conv(ppm_out)
+        conv_x = conv_out[1]
+        conv_x = self.fpn_in(conv_x) # lateral branch
+        f = nn.functional.upsample(
+            f, size=conv_x.size()[2:], mode='bilinear', align_corners=False) # top-down branch
+        f = torch.cat([conv_x, f], dim=1)
+        fpn_features = self.fpn_out(f)
+        x = self.conv_last(fpn_features)
+        if self.use_softmax or segSize is not None:  # is True during inference
+            x = nn.functional.upsample(
+                x, size=segSize, mode='bilinear', align_corners=False)
+            x = nn.functional.softmax(x, dim=1)
+            return x
+
+        return x
+
 class Deeplab(nn.Module):
     def __init__(self, low_level_inplanes):
         super(Deeplab, self).__init__()
 
         #aspp
-        self.aspp = build_aspp(backbone, 16, BatchNorm)
+        self.aspp = build_aspp('', 16, BatchNorm)
         #decoder
         self.conv1 = nn.Conv2d(low_level_inplanes, 48, 1, bias=False, groups=cfg.RESNETS.NUM_GROUPS)
         self.bn1 = BatchNorm(48)
