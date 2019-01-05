@@ -144,8 +144,8 @@ class TestNet(object):
         #set device of gpu
         # assert False, 'use os.env to set device gpu %s'%str(args.gpus)
         os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(ids) for ids in args.gpu])
-        print (args.network)
-        self.net = eval(args.network)()
+        print (cfg.MODEL.TYPE)
+        self.net = eval(cfg.MODEL.TYPE)()
         #init weight
         # pretrained_model = args.premodel
         
@@ -315,7 +315,7 @@ def to_test_semseg(args):
         pred_final_list = []
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
             scale = round2nearest_multiple(scale, net_stride)
-            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 3000 else [scale//4, scale//2]
+            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 3500 else [scale//4, scale//2]
             args.input_size = cfg.SEM.INPUT_SIZE
             #cfg_from_file(args.config)
             pred_list = [] ##预测的数据
@@ -330,7 +330,7 @@ def to_test_semseg(args):
                         im_flip = im[:, :, ::-1].copy()
                         input_data = Variable(torch.from_numpy(im_flip[np.newaxis,:]).float(), requires_grad=False).cuda()
                         pred_dict += test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()[:, :, :, ::-1]
-                pred_list.append(pred_dict/2)
+                pred_list.append(pred_dict/iflip)
             pred_final_list.append(test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args))
             del pred_list
             del one_list

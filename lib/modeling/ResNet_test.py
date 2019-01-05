@@ -12,7 +12,8 @@ from utils.resnet_weights_helper import convert_state_dict
 # ---------------------------------------------------------------------------- #
 # Bits for specific architectures (ResNet50, ResNet101, ...)
 # ---------------------------------------------------------------------------- #
-
+#define rate for dense test
+rate = 1
 def ResNet50_conv4_body():
     return ResNet_convX_body((3, 4, 6))
 
@@ -47,24 +48,22 @@ class ResNet_convX_body(nn.Module):
 
         self.res1 = globals()[cfg.RESNETS.STEM_FUNC]()
         dim_in = 64
+        cur_stride = 1
         dim_bottleneck = cfg.RESNETS.NUM_GROUPS * cfg.RESNETS.WIDTH_PER_GROUP
         self.res2, dim_in = add_stage(dim_in, 256, dim_bottleneck, block_counts[0],
                                       dilation=1, stride_init=1)
         self.res3, dim_in = add_stage(dim_in, 512, dim_bottleneck * 2, block_counts[1],
-                                      dilation=1, stride_init=2)
+                                      dilation=1, stride_init=2, cur_stride)
         if cfg.SEM.SEM_ON and cfg.SEM.ARCH_ENCODER.endswith('dilated8'):
+            assert False, "not support for 4x test"
             self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
-                                      dilation=2, stride_init=1)
-        elif not self.is_training:
-            print ('+++++++++++++++++++++call with 8x for ubernet+++++++++++++++++++++')
-            self.res4, dim_in = add_stage_test(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
                                       dilation=2, stride_init=1)
         else:
-            self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
-                                      dilation=1, stride_init=2)
+            self.res4, dim_in = add_stage_test(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
+                                      dilation=1, stride_init=1)
         if len(block_counts) == 4:
             stride_init = 2 if cfg.RESNETS.RES5_DILATION == 1 else 1
-            self.res5, dim_in = add_stage(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
+            self.res5, dim_in = add_stage_mgrid(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
                                           cfg.RESNETS.RES5_DILATION, stride_init)
             self.spatial_scale = 1 / 32 * cfg.RESNETS.RES5_DILATION
         else:
@@ -147,6 +146,7 @@ class ResNet_roi_conv5_head(nn.Module):
     def _init_modules(self):
         # Freeze all bn (affine) layers !!!
         self.apply(lambda m: freeze_params(m) if isinstance(m, mynn.AffineChannel2d) else None)
+        #pass
 
     def detectron_weight_mapping(self):
         mapping_to_detectron, orphan_in_detectron = \
@@ -170,6 +170,27 @@ class ResNet_roi_conv5_head(nn.Module):
             return x
 
 
+def add_stage_mgrid(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
+    """Make a stage consist of `nblocks` residual blocks.
+    Returns:
+        - stage module: an nn.Sequentail module of residual blocks
+        - final output dimension
+    """
+    res_blocks = []
+    stride = stride_init
+    global rate
+    print ("mgrid rate", rate)
+    for i in range(nblocks):
+        dilation = cfg.SEM.MULTI_GRID[i]
+        res_blocks.append(add_residual_block(
+            inplanes, outplanes, innerplanes, rate*dilation, stride
+        ))
+        inplanes = outplanes
+        stride = 1
+
+    return nn.Sequential(*res_blocks), outplanes
+
+
 def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride_init=2):
     """Make a stage consist of `nblocks` residual blocks.
     Returns:
@@ -178,13 +199,14 @@ def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride
     """
     res_blocks = []
     stride = stride_init
+    global rate
     for _ in range(nblocks):
         res_blocks.append(add_residual_block(
-            inplanes, outplanes, innerplanes, dilation, stride
+            inplanes, outplanes, innerplanes, rate*dilation, stride
         ))
         inplanes = outplanes
         stride = 1
-        dilation = 1
+        rate *= 2
 
     return nn.Sequential(*res_blocks), outplanes
 
