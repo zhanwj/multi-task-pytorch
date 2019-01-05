@@ -52,7 +52,7 @@ class ResNet_convX_body(nn.Module):
         self.res2, dim_in = add_stage(dim_in, 256, dim_bottleneck, block_counts[0],
                                       dilation=1, stride_init=1)
         self.res3, dim_in = add_stage(dim_in, 512, dim_bottleneck * 2, block_counts[1],
-                                      dilation=1, stride_init=2, cur_stride)
+                                      dilation=1, stride_init=2)
         if cfg.SEM.SEM_ON and cfg.SEM.ARCH_ENCODER.endswith('dilated8'):
             self.res4, dim_in = add_stage_test(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
                                       dilation=1, stride_init=1)

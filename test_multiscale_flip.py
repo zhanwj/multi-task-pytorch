@@ -74,7 +74,7 @@ def argument():
     # parser.add_argument('--config', dest='config', help='which file to restore', default='configs/baselines/e2e_pspnet-101_2x.yaml', type=str)
     parser.add_argument('--config', dest='config', help='which file to restore', default='./configs/baselines/e2e_ubernet-101_2x.yaml', type=str)
     parser.add_argument('--save_file', dest='save_file', help='where to save file', default='./seg_pred_pic/pred_sem_val_500_ubernet50_plateau/', type=str)
-    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=0, type=int)
+    parser.add_argument('--gpu', dest='gpu', help='give a gpu to train network', default=[0], nargs='+', type=int)
     parser.add_argument('--input_size', dest='input_size', help='input size of network', nargs='+', default=[720,720], type=int)
     parser.add_argument('--aug_scale', dest='aug_scale', help='scale image of network', nargs='+', default=[1440], type=int)
     parser.add_argument('--network', dest='network', help='network name', default='Generalized_SEMSEG', type=str)
@@ -143,7 +143,7 @@ class TestNet(object):
     def load_net(self, args):
         #set device of gpu
         # assert False, 'use os.env to set device gpu %s'%str(args.gpus)
-        #os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(ids) for ids in args.gpu])
+        os.environ["CUDA_VISIBLE_DEVICES"] = ','.join([str(ids) for ids in args.gpu])
         print (cfg.MODEL.TYPE)
         self.net = eval(cfg.MODEL.TYPE)()
         #init weight
@@ -154,10 +154,7 @@ class TestNet(object):
         pretrained=torch.load(self.pretrained_model, map_location=lambda storage, loc: storage)
         pretrained = pretrained['model']
         self.net.load_state_dict(pretrained,strict=True)
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
-        self.net.encoder.to('cuda')
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu+1)
-        self.net.decoder.to('cuda')
+        self.net.to('cuda')
         print("weights load success")
         self.net.eval()
         for p in self.net.parameters():
@@ -318,7 +315,7 @@ def to_test_semseg(args):
         pred_final_list = []
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
             scale = round2nearest_multiple(scale, net_stride)
-            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 5000 else [scale//4, scale//2]
+            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 3000 else [scale//4, scale//2]
             args.input_size = cfg.SEM.INPUT_SIZE
             #cfg_from_file(args.config)
             pred_list = [] ##预测的数据
@@ -328,15 +325,11 @@ def to_test_semseg(args):
                 for iflip in range(1):
                     if iflip == 0:
                         input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
-                        #pred_dict = test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()
-                        features = test_net.net.encoder(input_data, return_feature_maps=True)
-                        pred_dict = test_net.net.decoder(features, segSize=cfg.SEM.INPUT_SIZE)[args.prefix_semseg].detach().cpu().numpy()
+                        pred_dict = test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()
                     else:
                         im_flip = im[:, :, ::-1].copy()
                         input_data = Variable(torch.from_numpy(im_flip[np.newaxis,:]).float(), requires_grad=False).cuda()
-                        #pred_dict += test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()[:, :, :, ::-1]
-                        features = test_net.net.encoder(input_data, return_feature_maps=True)
-                        pred_dict += test_net.net.decoder(features, segSize=cfg.SEM.INPUT_SIZE)[args.prefix_semseg].detach().cpu().numpy()
+                        pred_dict += test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()[:, :, :, ::-1]
                 pred_list.append(pred_dict/(1+iflip))
             pred_final_list.append(test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args))
             del pred_list
