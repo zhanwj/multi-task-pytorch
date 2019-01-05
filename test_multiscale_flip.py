@@ -328,19 +328,15 @@ def to_test_semseg(args):
                 for iflip in range(1):
                     if iflip == 0:
                         input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
-                        if scale <= 3000:
-                            pred_dict = test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()
-                        else:
-                            features = test_net.net.encoder(input_data, return_feature_maps=True)
-                            pred_dict = test_net.net.decoder(features, segSize=cfg.SEM.INPUT_SIZE)[args.prefix_semseg].detach().cpu().numpy()
+                        #pred_dict = test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()
+                        features = test_net.net.encoder(input_data, return_feature_maps=True)
+                        pred_dict = test_net.net.decoder(features, segSize=cfg.SEM.INPUT_SIZE)[args.prefix_semseg].detach().cpu().numpy()
                     else:
                         im_flip = im[:, :, ::-1].copy()
                         input_data = Variable(torch.from_numpy(im_flip[np.newaxis,:]).float(), requires_grad=False).cuda()
-                        if scale <= 3000:
-                            pred_dict += test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()[:, :, :, ::-1]
-                        else:
-                            features = test_net.net.encoder(input_data, return_feature_maps=True)
-                            pred_dict += test_net.net.decoder(features, segSize=cfg.SEM.INPUT_SIZE)[args.prefix_semseg].detach().cpu().numpy()
+                        #pred_dict += test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()[:, :, :, ::-1]
+                        features = test_net.net.encoder(input_data, return_feature_maps=True)
+                        pred_dict += test_net.net.decoder(features, segSize=cfg.SEM.INPUT_SIZE)[args.prefix_semseg].detach().cpu().numpy()
                 pred_list.append(pred_dict/(1+iflip))
             pred_final_list.append(test_net.save_pred(pred_list, image_name, [scale, scale_i], index, args))
             del pred_list
