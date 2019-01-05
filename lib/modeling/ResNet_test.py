@@ -13,7 +13,6 @@ from utils.resnet_weights_helper import convert_state_dict
 # Bits for specific architectures (ResNet50, ResNet101, ...)
 # ---------------------------------------------------------------------------- #
 #define rate for dense test
-rate = 1
 def ResNet50_conv4_body():
     return ResNet_convX_body((3, 4, 6))
 
@@ -55,12 +54,11 @@ class ResNet_convX_body(nn.Module):
         self.res3, dim_in = add_stage(dim_in, 512, dim_bottleneck * 2, block_counts[1],
                                       dilation=1, stride_init=2, cur_stride)
         if cfg.SEM.SEM_ON and cfg.SEM.ARCH_ENCODER.endswith('dilated8'):
-            assert False, "not support for 4x test"
-            self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
-                                      dilation=2, stride_init=1)
-        else:
             self.res4, dim_in = add_stage_test(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
                                       dilation=1, stride_init=1)
+        else:
+            self.res4, dim_in = add_stage(dim_in, 1024, dim_bottleneck * 4, block_counts[2],
+                                      dilation=1, stride_init=2)
         if len(block_counts) == 4:
             stride_init = 2 if cfg.RESNETS.RES5_DILATION == 1 else 1
             self.res5, dim_in = add_stage_mgrid(dim_in, 2048, dim_bottleneck * 8, block_counts[3],
@@ -178,12 +176,10 @@ def add_stage_mgrid(inplanes, outplanes, innerplanes, nblocks, dilation=1, strid
     """
     res_blocks = []
     stride = stride_init
-    global rate
-    print ("mgrid rate", rate)
     for i in range(nblocks):
         dilation = cfg.SEM.MULTI_GRID[i]
         res_blocks.append(add_residual_block(
-            inplanes, outplanes, innerplanes, rate*dilation, stride
+            inplanes, outplanes, innerplanes, dilation, stride
         ))
         inplanes = outplanes
         stride = 1
@@ -199,14 +195,13 @@ def add_stage_test(inplanes, outplanes, innerplanes, nblocks, dilation=1, stride
     """
     res_blocks = []
     stride = stride_init
-    global rate
     for _ in range(nblocks):
         res_blocks.append(add_residual_block(
-            inplanes, outplanes, innerplanes, rate*dilation, stride
+            inplanes, outplanes, innerplanes, dilation, stride
         ))
         inplanes = outplanes
         stride = 1
-        rate *= 2
+        dilation = 2
 
     return nn.Sequential(*res_blocks), outplanes
 
