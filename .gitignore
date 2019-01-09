@@ -12,6 +12,7 @@ nohup.out
 pretrain_model
 /output
 /trainLog
+./test*
 *.o
 *.so
 *.log
