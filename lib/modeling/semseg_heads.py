@@ -12,7 +12,6 @@ import math
 from modeling.backbone import build_backbone
 from modeling.aspp import build_aspp
 from modeling.cspn import Affinity_Propagate
-from modeling.spn_bat import SPN
 import utils.resnet_weights_helper as resnet_utils
 import pickle
 BatchNorm = SynchronizedBatchNorm2d

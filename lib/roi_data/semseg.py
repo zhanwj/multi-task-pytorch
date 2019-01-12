@@ -62,14 +62,15 @@ def _sample_rois(roidb, im_scale, batch_idx, interp):
         prefix = cfg.SEM.OUTPUT_PREFIX
         input_label = 255*np.ones(cfg.SEM.INPUT_SIZE, dtype=np.long)
         semseg_label = cv2.imread(roidb[prefix], 0)
-        assert np.any(semseg_label != -1), 'semseg error -1'
+        semseg_label = semseg_label[cfg.SEM.CUT_HEIGHT:, :]
+        assert np.all(semseg_label > -1) and np.all(semseg_label < 9), 'semseg error -1'
     else:
         prefix = cfg.DISP.OUTPUT_PREFIX
         input_label = np.zeros(cfg.SEM.INPUT_SIZE, dtype=np.float32)
         semseg_label = np.asarray(Image.open(roidb[prefix]))/255
     if roidb['flipped']:
         semseg_label = semseg_label[:, ::-1]
-    semseg_label = cv2.resize(semseg_label, (scale, scale//2), interpolation=interp)
+    semseg_label = cv2.resize(semseg_label, scale, interpolation=interp)
     y1, x1, h_e, w_e = crop_index
     input_label[0: h_e, 0: w_e] = semseg_label[y1: y1+ h_e, x1: x1+ w_e]
     #input_label = input_label.astype(np.float16)

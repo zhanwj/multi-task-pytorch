@@ -95,6 +95,7 @@ def _get_multitask_image_blob(roidb, prefix, followed=False):
     im_scales = []
     for i in range(num_images):
         im = cv2.imread(roidb[i][prefix])
+        im = im[cfg.SEM.CUT_HEIGHT:, :, :]
         assert im is not None, \
             'Failed to read image \'{}\''.format(roidb[i][prefix])
         if roidb[i]['flipped']:

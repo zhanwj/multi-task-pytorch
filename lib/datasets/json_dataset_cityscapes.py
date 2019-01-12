@@ -115,28 +115,22 @@ class JsonDataset(object):
         # Reference back to the parent dataset
         entry['dataset'] = self
         # Make file_name an abs path, file_name is the root of: image_L, image_R, semseg, disparity
-        im_path = os.path.join(
-            self.image_directory, self.image_prefix + entry['file_name'].split()[0]
-        )
-        assert os.path.exists(im_path), 'Image \'{}\' not found'.format(im_path)
-        entry['image_L'] = im_path
-
-        # add semseg label name
-        file_name = entry['file_name'].split()
+        file_name = entry['file_name'].split(',')
         if len(file_name) == 4:
             image_L, image_R, semseg, disp = file_name
+        elif len(file_name) == 3:
+            image_L, semseg, _ = file_name
+            disp = None
+            image_R = None
         else:
             image_L, image_R = file_name
             semseg, disp = None, None
-        im_path = os.path.join(
-            self.image_directory, self.image_prefix + image_L
-        )
+        im_path = image_L
         assert os.path.exists(im_path), 'Image \'{}\' not found'.format(im_path)
+        entry['image_L'] = im_path
 
         if semseg is not None:
-            im_path = os.path.join(
-                self.image_directory, self.image_prefix + semseg
-            )
+            im_path = semseg
             assert os.path.exists(im_path), 'Image \'{}\' not found'.format(im_path)
             entry[cfg.SEM.OUTPUT_PREFIX] = im_path
 

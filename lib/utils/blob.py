@@ -122,7 +122,7 @@ def prep_multitask_im_for_blob(im, pixel_means, target_sizes, max_size, followed
     im_scales = []
     if followed:
         scale, crop_index = target_sizes[0]
-        im_resized = cv2.resize(im, (scale, scale//2))
+        im_resized = cv2.resize(im, scale)
         input_shape = cfg.SEM.INPUT_SIZE
         input_data = np.zeros(input_shape+[3])
         y1, x1, h_e, w_e = crop_index
@@ -131,11 +131,13 @@ def prep_multitask_im_for_blob(im, pixel_means, target_sizes, max_size, followed
 
     for target_size in target_sizes:
         net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
-        target_size = round2nearest_multiple(target_size, net_stride)
-        im_resized = cv2.resize(im, (target_size, target_size//2))
+        height, width = im.shape[:2]
+        scale_h = round2nearest_multiple(int(np.round(target_size*height)), net_stride)
+        scale_w = round2nearest_multiple(int(np.round(target_size*width)), net_stride)
+        im_resized = cv2.resize(im, (scale_w, scale_h))
         im_resized, crop_index = crop_image(im_resized)
         ims.append(im_resized)
-        im_scales.append([target_size, crop_index])
+        im_scales.append([(scale_w, scale_h), crop_index])
     return ims, im_scales
 
 def crop_image(image, is_train=True):

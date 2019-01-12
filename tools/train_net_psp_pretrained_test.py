@@ -25,11 +25,7 @@ import utils.misc as misc_utils
 from core.config import cfg, cfg_from_file, cfg_from_list, assert_and_infer_cfg
 from datasets.roidb import combined_roidb_for_training, combined_roidb_for_training_semseg
 from modeling.model_builder import Generalized_RCNN
-from modeling.model_builder_3DSD import Generalized_3DSD
-from modeling.model_builder_segdisp import Generalized_SEGDISP
 from modeling.model_builder_semseg_bat import Generalized_SEMSEG
-from modeling.model_builder_segcspn import Generalized_SEGCSPN
-from modeling.model_builder_spn import Generalized_SPN
 from roi_data.loader import RoiDataLoader, MinibatchSampler, collate_minibatch, collate_minibatch_semseg
 from utils.detectron_weight_helper import load_detectron_weight
 from utils.logging import log_stats
@@ -351,10 +347,12 @@ def main():
         state_dict={}
         pretrained=torch.load(cfg.SEM.PSPNET_PRETRAINED_WEIGHTS, map_location=lambda storage, loc: storage)
         pretrained = pretrained['model']
-        if cfg.SEM.SPN_ON:
-            maskRCNN.pspnet.load_state_dict(pretrained,strict=True)
-        else:
-            maskRCNN.load_state_dict(pretrained,strict=False)
+        encoder = dict()
+        for k,v in pretrained.items():
+            if 'decoder' in k:
+                continue
+            encoder[k.replace('encoder.','')] = v
+        maskRCNN.encoder.load_state_dict(encoder,strict=True)
         print("weights load success")
 
     if cfg.SEM.SPN_ON:

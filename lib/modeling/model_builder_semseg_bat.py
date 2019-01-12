@@ -20,7 +20,7 @@ import modeling.semseg_heads as semseg_heads
 import utils.blob as blob_utils
 import utils.net as net_utils
 import utils.resnet_weights_helper as resnet_utils
-
+import cv2
 logger = logging.getLogger(__name__)
 
 
@@ -76,11 +76,16 @@ class SegmentationModuleBase(nn.Module):
 
     def pixel_acc(self, pred, label):
         _, preds = torch.max(pred, dim=1)
-        valid = (label!=255).long()
-        acc_sum = torch.sum((preds == label).long())
+        valid = (label!=255).float()
+        key_label = (label!=0).float() * valid
+        acc_sum = (preds == label).float()
         pixel_sum = torch.sum(valid)
-        acc = acc_sum.float() / (pixel_sum.float() + 1e-10)
-        return acc
+        key_sum = torch.sum(key_label)
+        key_acc = torch.sum(acc_sum*key_label) / (key_sum + 1e-10)
+        acc = torch.sum(acc_sum) / (pixel_sum + 1e-10)
+        #if key_acc >= 0.3:
+        #    cv2.imwrite('label.png',25*preds[0].detach().cpu().numpy())
+        return [acc, key_acc]
 
 
 class Generalized_SEMSEG(SegmentationModuleBase):
@@ -106,6 +111,9 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 weights='')
         self.deep_sup_scale = cfg.SEM.DEEP_SUB_SCALE
         self.flag = 0
+        #pos_weight=torch.ones(cfg.MODEL.NUM_CLASSES)
+        #pos_weight[0] = cfg.SEM.OHEM_POS
+        #self.crit = nn.NLLLoss(ignore_index=255, weight=Variable(pos_weight, requires_grad=False).to('cuda'))
         self.crit = nn.NLLLoss(ignore_index=255)
 
         if not cfg.SEM.OHEM_ON:
@@ -134,11 +142,15 @@ class Generalized_SEMSEG(SegmentationModuleBase):
             for p in self.Conv_Body.parameters():
                 p.requires_grad = False
 
-    def loss_norm(self, pred_semseg, semseg_label):
+    def loss_norm(self, pred_semseg, semseg_label, semseg_weight=None):
         if pred_semseg.shape[-1] != semseg_label.shape[-1]:
             pred_semseg=nn.functional.interpolate(pred_semseg,size=semseg_label.shape[1:],mode='bilinear',align_corners=False)
         pred_semseg = F.log_softmax(pred_semseg, dim=1)
+        #semseg_weight = (semseg_label!=0).float() + cfg.SEM.OHEM_POS*(semseg_label==0).float()
+        #semseg_weight = semseg_weight * (semseg_label!=255).float()
         loss = self.crit(pred_semseg, semseg_label)
+        #loss = loss * semseg_weight
+        #loss = torch.sum(loss) / torch.sum(semseg_weight)
         acc = self.pixel_acc(pred_semseg, semseg_label)
         return loss, acc
 
@@ -151,12 +163,12 @@ class Generalized_SEMSEG(SegmentationModuleBase):
         scan_pos = (semseg_label.unsqueeze(1) == scan_pos).float()
         prob_pos = torch.softmax(pred_semseg, dim=1)
         prob_pos = torch.sum(prob_pos*scan_pos, dim=1)
-        semseg_label[prob_pos>cfg.SEM.OHEM_POS] = 255
+        eval_label = (prob_pos<cfg.SEM.OHEM_POS).float()*(semseg_label!=255).float()
         pred_semseg = F.log_softmax(pred_semseg, dim=1)
         loss = self.crit(pred_semseg, semseg_label)
+        loss = loss * eval_label
+        loss = torch.sum(loss) / torch.sum(eval_label+1e-10)
         acc = self.pixel_acc(pred_semseg, semseg_label)
-        del scan_pos 
-        del scan
         return loss, acc
 
     def forward(self, data, **feed_dict):
@@ -172,7 +184,8 @@ class Generalized_SEMSEG(SegmentationModuleBase):
                 pred_semseg = self.decoder(self.encoder(data, return_feature_maps=True))
             loss, acc = self.loss_semseg(pred_semseg, feed_dict['{}_{}'.format(cfg.SEM.OUTPUT_PREFIX,0)])
             return_dict['losses']['loss_semseg'] = loss
-            return_dict['metrics']['accuracy_pixel'] = acc
+            return_dict['metrics']['accuracy_pixel'] = acc[0]
+            return_dict['metrics']['key_accuracy_pixel'] = acc[1]
             if cfg.SEM.DECODER_TYPE.endswith('deepsup') or cfg.SEM.DECODER_TYPE.startswith('spn'):
                 assert len(cfg.SEM.DEEP_SUB_SCALE)>1, 'per weight in each output side need to give'
                 for i in range(1, len(cfg.SEM.DEEP_SUB_SCALE)):
