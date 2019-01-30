@@ -105,6 +105,12 @@ DATASETS = {
         ANN_FN:
             _DATA_DIR + '/cityscapes/annotations/coarse_trainId.txt'
     },
+    'cityscapes_trainval': {
+        IM_DIR:
+            _DATA_DIR + '/cityscapes/',
+        ANN_FN:
+            _DATA_DIR + '/cityscapes/annotations/trainval.txt'
+    },
     'coco_2014_train': {
         IM_DIR:
             _DATA_DIR + '/coco/images/train2014',

@@ -42,9 +42,11 @@ def add_sem_blobs(blobs, im_scales, roidb, interp):
         for k, v in frcn_blobs.items():
             blobs[k].append(v)
     # Concat the training blob lists into tensors
-    for k, v in blobs.items():
-        if isinstance(v, list) and len(v) > 0:
-            blobs[k] = np.concatenate(v)
+    for k, v in frcn_blobs.items():
+        if interp == cv2.INTER_NEAREST:
+            blobs[k]=blob_utils.segm_list_to_blob(v, value=255)
+        else:
+            blobs[k]=blob_utils.segm_list_to_blob(v, value=0)
 
 
     # Perform any final work and validity checks after the collating blobs for
@@ -60,26 +62,23 @@ def _sample_rois(roidb, im_scale, batch_idx, interp):
     scale, crop_index = im_scale
     if interp == cv2.INTER_NEAREST:
         prefix = cfg.SEM.OUTPUT_PREFIX
-        input_label = 255*np.ones(cfg.SEM.INPUT_SIZE, dtype=np.long)
         semseg_label = cv2.imread(roidb[prefix], 0)
         assert np.any(semseg_label != -1), 'semseg error -1'
     else:
         prefix = cfg.DISP.OUTPUT_PREFIX
-        input_label = np.zeros(cfg.SEM.INPUT_SIZE, dtype=np.float32)
         semseg_label = np.asarray(Image.open(roidb[prefix]))/255
     if roidb['flipped']:
         semseg_label = semseg_label[:, ::-1]
-    semseg_label = cv2.resize(semseg_label, (scale, scale//2), interpolation=interp)
     y1, x1, h_e, w_e = crop_index
-    input_label[0: h_e, 0: w_e] = semseg_label[y1: y1+ h_e, x1: x1+ w_e]
-    #input_label = input_label.astype(np.float16)
+    semseg_label_crop = semseg_label[y1: y1+ h_e, x1: x1+ w_e]
+    semseg_label_crop = cv2.resize(semseg_label_crop, scale, interpolation=interp)
     blob_dict = {}
     if interp != cv2.INTER_NEAREST:
         blob_dict['{}_{}'.format(prefix, 0)]= \
-                input_label[np.newaxis, :, :]
+                semseg_label_crop
         return blob_dict 
     # Add label to other loss
-    blob_dict['{}_{}'.format(prefix, 0)] = input_label[np.newaxis].copy()
+    blob_dict['{}_{}'.format(prefix, 0)] = semseg_label_crop
 
     return blob_dict
 

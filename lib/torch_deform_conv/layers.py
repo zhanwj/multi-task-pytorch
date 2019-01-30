@@ -30,7 +30,8 @@ class ConvOffset2D(nn.Conv2d):
         """
         self.filters = filters
         self._grid_param = None
-        super(ConvOffset2D, self).__init__(self.filters, self.filters*2, 3, padding=1, bias=False, **kwargs)
+        #super(ConvOffset2D, self).__init__(self.filters, self.filters*2, 3, padding=1, bias=False, **kwargs)
+        super(ConvOffset2D, self).__init__(self.filters, self.filters*2, **kwargs)
         self.weight.data.copy_(self._init_weights(self.weight, init_normal_stddev))
 
     def forward(self, x):

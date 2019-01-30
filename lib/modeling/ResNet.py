@@ -122,7 +122,8 @@ class ResNet_convX_body(nn.Module):
         conv_out=[]
         for i in range(self.convX):
             x = getattr(self, 'res%d' % (i + 1))(x)
-            conv_out.append(x)
+            if i > 0:
+                conv_out.append(x)
         if return_feature_maps:
             return conv_out
 

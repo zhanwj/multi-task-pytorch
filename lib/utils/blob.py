@@ -73,20 +73,47 @@ def im_list_to_blob(ims):
     """
     if not isinstance(ims, list):
         ims = [ims]
-    max_shape = get_max_shape([im.shape[:2] for im in ims])
+    #max_shape = get_max_shape([im.shape[:2] for im in ims])
+    max_shape = cfg.SEM.INPUT_SIZE
 
     num_images = len(ims)
     blob = np.zeros(
-        (num_images, max_shape[0], max_shape[1], 3), dtype=np.float32)
+            (num_images, max_shape[0], max_shape[1], 3), dtype=np.float32)
     for i in range(num_images):
         im = ims[i]
-        blob[i, 0:im.shape[0], 0:im.shape[1], :] = im
+        blob[i] = im[:max_shape[0], :max_shape[1], :]
     # Move channels (axis 3) to axis 1
     # Axis order will become: (batch elem, channel, height, width)
     channel_swap = (0, 3, 1, 2)
     blob = blob.transpose(channel_swap)
     return blob
 
+def segm_list_to_blob(ims, value=0):
+    """Convert a list of images into a network input. Assumes images were
+    prepared using prep_im_for_blob or equivalent: i.e.
+      - BGR channel order
+      - pixel means subtracted
+      - resized to the desired input size
+      - float32 numpy ndarray format
+    Output is a 4D HCHW tensor of the images concatenated along axis 0 with
+    shape.
+    """
+    if not isinstance(ims, list):
+        ims = [ims]
+    #max_shape = get_max_shape([im.shape[:2] for im in ims])
+    max_shape = cfg.SEM.INPUT_SIZE
+    num_images = len(ims)
+    if value==0:
+        blob = np.zeros(
+            (num_images, max_shape[0], max_shape[1]), dtype=np.float32)
+    else:
+        blob = value*np.ones(
+            (num_images, max_shape[0], max_shape[1]), dtype=np.long)
+
+    for i in range(num_images):
+        im = ims[i]
+        blob[i]  = im[:max_shape[0], :max_shape[1]]
+    return blob
 
 def get_max_shape(im_shapes):
     """Calculate max spatial size (h, w) for batching given a list of image shapes
@@ -94,10 +121,10 @@ def get_max_shape(im_shapes):
     max_shape = np.array(im_shapes).max(axis=0)
     assert max_shape.size == 2
     # Pad the image so they can be divisible by a stride
-    if not cfg.SEM.SEM_ON and cfg.FPN.FPN_ON :
-        stride = float(cfg.FPN.COARSEST_STRIDE)
-        max_shape[0] = int(np.ceil(max_shape[0] / stride) * stride)
-        max_shape[1] = int(np.ceil(max_shape[1] / stride) * stride)
+    #stride = float(cfg.FPN.COARSEST_STRIDE)
+    stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
+    max_shape[0] = int(np.ceil(max_shape[0] / stride) * stride)
+    max_shape[1] = int(np.ceil(max_shape[1] / stride) * stride)
     return max_shape
 
 
@@ -122,7 +149,7 @@ def prep_multitask_im_for_blob(im, pixel_means, target_sizes, max_size, followed
     im_scales = []
     if followed:
         scale, crop_index = target_sizes[0]
-        im_resized = cv2.resize(im, (scale, scale//2))
+        im_resized = cv2.resize(im, scale)
         input_shape = cfg.SEM.INPUT_SIZE
         input_data = np.zeros(input_shape+[3])
         y1, x1, h_e, w_e = crop_index
@@ -130,15 +157,17 @@ def prep_multitask_im_for_blob(im, pixel_means, target_sizes, max_size, followed
         return [input_data], target_sizes
 
     for target_size in target_sizes:
-        net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
-        target_size = round2nearest_multiple(target_size, net_stride)
-        im_resized = cv2.resize(im, (target_size, target_size//2))
-        im_resized, crop_index = crop_image(im_resized)
+        target_size = 1.0*target_size/im.shape[1]
+        im, crop_index = crop_image(im, target_size)
+        height, width = im.shape[:2]
+        scale_h = int(np.round(target_size*height))
+        scale_w = int(np.round(target_size*width))
+        im_resized = cv2.resize(im, (scale_w, scale_h))
         ims.append(im_resized)
-        im_scales.append([target_size, crop_index])
+        im_scales.append([(scale_w, scale_h), crop_index])
     return ims, im_scales
 
-def crop_image(image, is_train=True):
+def crop_image(image, target_size, is_train=True):
     def crop_index(ndim, new_dim, is_train):
         sh, sw = 0, 0
         if is_train:
@@ -147,8 +176,13 @@ def crop_image(image, is_train=True):
             sw = np.random.randint(0, ndim[1] -new_dim[1] ) \
                 if ndim[1] > new_dim[1] else 0
         return sh,sw
-    input_shape = cfg.SEM.INPUT_SIZE #input size of network
     max_h, max_w = image.shape[:2]
+    net_stride = 8 if '8' in cfg.SEM.ARCH_ENCODER else 16
+    input_shape = [0, 0] #input size of network
+    input_shape[0] = 1.0*cfg.SEM.INPUT_SIZE[0] / target_size
+    input_shape[0] = int(np.ceil(input_shape[0]/net_stride))*net_stride
+    input_shape[1] = 1.0*cfg.SEM.INPUT_SIZE[1] / target_size
+    input_shape[1] = int(np.ceil(input_shape[1]/net_stride))*net_stride
     im = np.zeros((input_shape+[3]))
     y1,x1 = crop_index([max_h, max_w], input_shape, is_train = is_train)
     h_e = min(input_shape[0], max_h)

@@ -315,14 +315,15 @@ def to_test_semseg(args):
         pred_final_list = []
         for scale_i, scale in enumerate(test_net.aug_scale): #每种scale
             scale = round2nearest_multiple(scale, net_stride)
-            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 3000 else [scale//4, scale//2]
+            cfg.SEM.INPUT_SIZE=[scale//2, scale] if scale <= 4000 else [scale//4, scale//2]
             args.input_size = cfg.SEM.INPUT_SIZE
+            print (args.input_size)
             #cfg_from_file(args.config)
             pred_list = [] ##预测的数据
             #pred_deepsup_list = []
             one_list, image_name, index = test_net.transfer_img(image, image_name, scale, args)
             for isave, im in enumerate(one_list): #剪成c多张图片 一张一张喂进去
-                for iflip in range(1):
+                for iflip in range(2):
                     if iflip == 0:
                         input_data = Variable(torch.from_numpy(im[np.newaxis,:]).float(), requires_grad=False).cuda()
                         pred_dict = test_net.net(input_data)[args.prefix_semseg].detach().cpu().numpy()

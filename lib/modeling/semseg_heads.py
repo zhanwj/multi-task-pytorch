@@ -9,13 +9,12 @@ import modeling.ResNet_test as ResNet_test
 import modeling.deform_conv as deform_conv
 from lib.nn import SynchronizedBatchNorm2d
 import math
-from modeling.backbone import build_backbone
-from modeling.aspp import build_aspp
-from modeling.cspn import Affinity_Propagate
-from modeling.spn_bat import SPN
+#from modeling.backbone import build_backbone
+#from modeling.aspp import build_aspp
+#from modeling.cspn import Affinity_Propagate
+#from modeling.spn_bat import SPN
 import utils.resnet_weights_helper as resnet_utils
 import pickle
-BatchNorm = SynchronizedBatchNorm2d
 def get_func(func_name):
     """Helper to return a function object by name. func_name must identify a
     function in this module or the path to a function relative to the base
@@ -720,8 +719,11 @@ class UPerNet(nn.Module):
             ))
         self.ppm_pooling = nn.ModuleList(self.ppm_pooling)
         self.ppm_conv = nn.ModuleList(self.ppm_conv)
-        self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1)
-
+        if 'deform_conv' in cfg.MODEL.CONV_BODY and False:
+            self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1)
+            self.ppm_last_conv_drop=nn.Dropout2d(0.1)
+        else:
+            self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1)
         # FPN Module
         self.fpn_in = []
         for fpn_inplane in fpn_inplanes[:-1]: # skip the top layer
@@ -743,11 +745,17 @@ class UPerNet(nn.Module):
                     GCN(fpn_dim, fpn_dim, kernel=15)
                 ))
         self.fpn_out = nn.ModuleList(self.fpn_out)
-        self.conv_last = nn.Sequential(
-            conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
-            nn.Conv2d(fpn_dim, num_class, kernel_size=1)
-        )
-        #self.conv_last = GCN(len(fpn_inplanes) * fpn_dim, fpn_dim)
+        if 'deform_conv' in cfg.MODEL.CONV_BODY and False:
+            self.conv_last = nn.Sequential(
+                conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
+                nn.Dropout2d(0.9),
+                nn.Conv2d(fpn_dim, num_class, kernel_size=1)
+            )
+        else:
+            self.conv_last = nn.Sequential(
+                conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
+                nn.Conv2d(fpn_dim, num_class, kernel_size=1)
+            )
 
     def forward(self, conv_out, segSize=None):
         if (len(conv_out)>4):
@@ -763,7 +771,8 @@ class UPerNet(nn.Module):
                 mode='bilinear', align_corners=False)))
         ppm_out = torch.cat(ppm_out, 1)
         f = self.ppm_last_conv(ppm_out)
-
+        if 'deform_conv' in cfg.MODEL.CONV_BODY and False:
+            f = self.ppm_last_conv_drop(f)
         fpn_feature_list = [f]
         for i in reversed(range(len(conv_out) - 1)):
             conv_x = conv_out[i]
@@ -955,7 +964,9 @@ class CspnUPerNet(nn.Module):
             ))
         self.ppm_pooling = nn.ModuleList(self.ppm_pooling)
         self.ppm_conv = nn.ModuleList(self.ppm_conv)
-        self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1)
+        self.ppm_last_conv = nn.Sequential(
+                conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1),
+                nn.Dropout2d(0.1))
 
         # FPN Module
         self.fpn_in = []
@@ -974,12 +985,14 @@ class CspnUPerNet(nn.Module):
             ))
         self.fpn_out = nn.ModuleList(self.fpn_out)
 
-        self.conv_last = nn.Sequential(
+        self.fpn_out_last = nn.Sequential(
             conv3x3_bn_relu(len(fpn_inplanes) * fpn_dim, fpn_dim, 1),
-            nn.Conv2d(fpn_dim, num_class, kernel_size=1)
+            nn.Dropout2d(0.9),
         )
+        self.conv_last = nn.Conv2d(fpn_dim, num_class, kernel_size=1)
+
         self.cspn_last = nn.Sequential(
-            nn.Conv2d(len(fpn_inplanes) * fpn_dim, 8*cfg.MODEL.NUM_CLASSES, 3, padding=1, groups=cfg.RESNETS.NUM_GROUPS),
+            nn.Conv2d(fpn_dim, 8*cfg.MODEL.NUM_CLASSES, 3, padding=1, groups=cfg.RESNETS.NUM_GROUPS),
             SynchronizedBatchNorm2d(8*cfg.MODEL.NUM_CLASSES),
         )
         self.cspn_net = Affinity_Propagate()
@@ -1018,11 +1031,16 @@ class CspnUPerNet(nn.Module):
                 output_size,
                 mode='bilinear', align_corners=False))
         fusion_out = torch.cat(fusion_list, 1)
-        x = self.conv_last(fusion_out)
-        guidance = self.cspn_last(fusion_out)
+        fusion_out = self.fusion_out_last(fusion_out)
+        fusion_out = nn.functional.upsample(fusion_out, scale_factor=2, 
+                mode='bilinear', align_corners=False)
 
-        x= nn.functional.upsample(x, scale_factor=2, mode='bilinear', align_corners=False)
-        guidance= nn.functional.upsample(guidance, scale_factor=2, mode='bilinear', align_corners=False)
+        x = self.conv_last(fusion_out)
+        #x= nn.functional.upsample(x, scale_factor=2, mode='bilinear', align_corners=False)
+        x = nn.functional.softmax(x, dim=1)
+
+        guidance = self.cspn_last(fusion_out)
+        #guidance= nn.functional.upsample(guidance, scale_factor=2, mode='bilinear', align_corners=False)
 
         b, c, h , w = guidance.shape
         guidance = guidance.view(b, 8, -1, h, w)
@@ -1035,6 +1053,7 @@ class CspnUPerNet(nn.Module):
             return x
 
         return x
+
 # upernet+spn
 class SpnUPerNet(nn.Module):
     def __init__(self, num_class=150, fc_dim=4096,

@@ -1,5 +1,4 @@
 from functools import wraps
-import importlib
 import logging
 
 import torch
@@ -9,13 +8,6 @@ from torch.autograd import Variable
 
 from lib.nn import SynchronizedBatchNorm2d
 from core.config import cfg
-from model.roi_pooling.functions.roi_pool import RoIPoolFunction
-#from model.roi_crop.functions.roi_crop import RoICropFunction
-#from modeling.roi_xfrom.roi_align.functions.roi_align import RoIAlignFunction
-import modeling.rpn_heads as rpn_heads
-import modeling.fast_rcnn_heads as fast_rcnn_heads
-import modeling.mask_rcnn_heads as mask_rcnn_heads
-import modeling.keypoint_rcnn_heads as keypoint_rcnn_heads
 import modeling.semseg_heads as semseg_heads
 import utils.blob as blob_utils
 import utils.net as net_utils

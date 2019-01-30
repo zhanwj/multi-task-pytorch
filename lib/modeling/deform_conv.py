@@ -122,7 +122,8 @@ class ResNet_convX_body(nn.Module):
         conv_out=[]
         for i in range(self.convX):
             x = getattr(self, 'res%d' % (i + 1))(x)
-            conv_out.append(x)
+            if i >0:
+                conv_out.append(x)
         if return_feature_maps:
             return conv_out
 
@@ -306,7 +307,8 @@ class bottleneck_transformation_deform(nn.Module):
             inplanes, innerplanes, kernel_size=1, stride=str1x1, bias=False)
         self.bn1 = mynn.AffineChannel2d(innerplanes)
         
-        self.conv2_offset = ConvOffset2D(innerplanes)
+        self.conv2_offset = ConvOffset2D(innerplanes, kernel_size=3, stride=str3x3, bias=False,
+                padding=1 * dilation, dilation=dilation, groups=group)
         self.conv2 = nn.Conv2d(
             innerplanes, innerplanes, kernel_size=3, stride=str3x3, bias=False,
             padding=1 * dilation, dilation=dilation, groups=group)
@@ -325,7 +327,8 @@ class bottleneck_transformation_deform(nn.Module):
         out = self.conv1(x)
         out = self.bn1(out)
         out = self.relu(out)
-
+        
+        out = self.conv2_offset(out)
         out = self.conv2(out)
         out = self.bn2(out)
         out = self.relu(out)

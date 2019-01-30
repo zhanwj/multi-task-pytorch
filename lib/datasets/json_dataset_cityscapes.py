@@ -31,7 +31,7 @@ import logging
 import numpy as np
 import os
 import scipy.sparse
-
+import random
 # Must happen before importing COCO API (which imports matplotlib)
 import utils.env as envu
 envu.set_up_matplotlib()
@@ -106,6 +106,13 @@ class JsonDataset(object):
             roidb = self.cityscapes.load_train_list(self.label_list_root)[:10]
         else:
             roidb = self.cityscapes.load_train_list(self.label_list_root)
+            random.shuffle(roidb)
+            original_batch_size = cfg.NUM_GPUS * cfg.TRAIN.IMS_PER_BATCH
+            if len(roidb) % original_batch_size != 0:
+                _get = original_batch_size - (len(roidb) % original_batch_size)
+                for entry in roidb[:_get]:
+                    roidb.append(entry.copy())
+            assert len(roidb) % original_batch_size == 0, 'error dropout'
         for entry in roidb:
             self._prep_roidb_entry(entry)
         return roidb

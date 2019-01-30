@@ -193,7 +193,7 @@ class DataLoaderIter(object):
         self.pin_memory = loader.pin_memory and torch.cuda.is_available()
         self.timeout = loader.timeout
         self.done_event = threading.Event()
-        self.maxsize=loader.maxsize
+
         self.sample_iter = iter(self.batch_sampler)
 
         if self.num_workers > 0:
@@ -206,7 +206,7 @@ class DataLoaderIter(object):
             self.send_idx = 0
             self.rcvd_idx = 0
             self.reorder_dict = {}
-
+            self.maxsize=loader.maxsize
             base_seed = torch.LongTensor(1).random_(0, 2**31-1)[0]
             self.workers = [
                 multiprocessing.Process(
@@ -216,7 +216,7 @@ class DataLoaderIter(object):
                 for i in range(self.num_workers)]
 
             if self.pin_memory or self.timeout > 0:
-                self.data_queue = queue.Queue(maxsize=self.maxsize)
+                self.data_queue = queue.Queue(self.maxsize)
                 if self.pin_memory:
                     maybe_device_id = torch.cuda.current_device()
                 else:
